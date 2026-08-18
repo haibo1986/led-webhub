@@ -1,0 +1,354 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum TenantStatus {
+  TRIAL
+  ACTIVE
+  SUSPENDED
+  ARCHIVED
+}
+
+enum MemberRole {
+  PLATFORM_ADMIN
+  TENANT_ADMIN
+  EDITOR
+  VIEWER
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  UNPUBLISHED
+  ARCHIVED
+}
+
+enum AssetVisibility {
+  PUBLIC
+  CONTROLLED
+  INTERNAL
+}
+
+enum InquiryStatus {
+  NEW
+  VIEWED
+  FOLLOWING
+  COMPLETED
+  INVALID
+}
+
+enum Locale {
+  ZH_CN
+  EN
+}
+
+model Tenant {
+  id              String            @id @default(cuid())
+  slug            String            @unique
+  name            String
+  status          TenantStatus      @default(TRIAL)
+  primaryColor    String            @default("#d99829")
+  secondaryColor  String            @default("#171918")
+  logoUrl         String?
+  shortName       String?
+  description     String?
+  email           String?
+  phone           String?
+  address         String?
+  defaultLocale   Locale            @default(ZH_CN)
+  publicDownloads Boolean           @default(true)
+  aiEnabled       Boolean           @default(false)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  domains         Domain[]
+  memberships     Membership[]
+  categories      ProductCategory[]
+  products        Product[]
+  cases           ProjectCase[]
+  newsPosts       NewsPost[]
+  assets          Asset[]
+  inquiries       Inquiry[]
+  auditLogs       AuditLog[]
+}
+
+model Domain {
+  id         String   @id @default(cuid())
+  tenantId   String
+  hostname   String   @unique
+  isPrimary  Boolean  @default(false)
+  isVerified Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+}
+
+model User {
+  id             String       @id @default(cuid())
+  email          String       @unique
+  name           String
+  passwordHash   String
+  disabledAt     DateTime?
+  createdAt      DateTime     @default(now())
+  memberships    Membership[]
+  auditLogs      AuditLog[]
+  uploadedAssets Asset[]
+}
+
+model Membership {
+  id         String     @id @default(cuid())
+  tenantId   String
+  userId     String
+  role       MemberRole
+  canPublish Boolean    @default(false)
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+}
+
+model ProductCategory {
+  id        String              @id @default(cuid())
+  tenantId  String
+  parentId  String?
+  slug      String
+  nameZh    String
+  nameEn    String?
+  isActive  Boolean             @default(true)
+  sortOrder Int                 @default(0)
+  tenant    Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent    ProductCategory?    @relation("CategoryTree", fields: [parentId], references: [id])
+  children  ProductCategory[]   @relation("CategoryTree")
+  products  Product[]
+  templates ParameterTemplate[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, isActive])
+}
+
+model ParameterTemplate {
+  id          String                @id @default(cuid())
+  tenantId    String
+  categoryId  String
+  name        String
+  version     Int                   @default(1)
+  category    ProductCategory       @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  definitions ParameterDefinition[]
+
+  @@index([tenantId, categoryId])
+}
+
+model ParameterDefinition {
+  id           String                  @id @default(cuid())
+  templateId   String
+  key          String
+  labelZh      String
+  labelEn      String?
+  fieldType    String
+  unit         String?
+  groupName    String
+  isRequired   Boolean                 @default(false)
+  isPublic     Boolean                 @default(true)
+  isFilterable Boolean                 @default(false)
+  sortOrder    Int                     @default(0)
+  template     ParameterTemplate       @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  values       VariantParameterValue[]
+
+  @@unique([templateId, key])
+}
+
+model Product {
+  id           String               @id @default(cuid())
+  tenantId     String
+  categoryId   String
+  model        String
+  slug         String
+  status       ContentStatus        @default(DRAFT)
+  featured     Boolean              @default(false)
+  publishedAt  DateTime?
+  deletedAt    DateTime?
+  createdAt    DateTime             @default(now())
+  updatedAt    DateTime             @updatedAt
+  tenant       Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  category     ProductCategory      @relation(fields: [categoryId], references: [id])
+  translations ProductTranslation[]
+  variants     ProductVariant[]
+  assets       ProductAsset[]
+  inquiries    Inquiry[]
+
+  @@unique([tenantId, slug])
+  @@unique([tenantId, model])
+  @@index([tenantId, status, deletedAt])
+}
+
+model ProductTranslation {
+  id             String  @id @default(cuid())
+  productId      String
+  locale         Locale
+  name           String
+  tagline        String?
+  description    String?
+  seoTitle       String?
+  seoDescription String?
+  isPublished    Boolean @default(false)
+  product        Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, locale])
+}
+
+model ProductVariant {
+  id        String                  @id @default(cuid())
+  productId String
+  sku       String
+  name      String
+  sortOrder Int                     @default(0)
+  isActive  Boolean                 @default(true)
+  product   Product                 @relation(fields: [productId], references: [id], onDelete: Cascade)
+  values    VariantParameterValue[]
+
+  @@unique([productId, sku])
+}
+
+model VariantParameterValue {
+  id           String              @id @default(cuid())
+  variantId    String
+  definitionId String
+  valueJson    Json
+  variant      ProductVariant      @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  definition   ParameterDefinition @relation(fields: [definitionId], references: [id])
+
+  @@unique([variantId, definitionId])
+}
+
+model Asset {
+  id              String          @id @default(cuid())
+  tenantId        String
+  objectKey       String          @unique
+  storageProvider String          @default("LOCAL")
+  fileName        String
+  mimeType        String
+  sizeBytes       BigInt
+  uploadedById    String?
+  visibility      AssetVisibility @default(INTERNAL)
+  createdAt       DateTime        @default(now())
+  deletedAt       DateTime?
+  tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  uploadedBy      User?           @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  products        ProductAsset[]
+
+  @@index([tenantId, visibility])
+}
+
+model ProductAsset {
+  productId String
+  assetId   String
+  role      String
+  sortOrder Int     @default(0)
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  asset     Asset   @relation(fields: [assetId], references: [id], onDelete: Restrict)
+
+  @@id([productId, assetId])
+}
+
+model Inquiry {
+  id        String        @id @default(cuid())
+  tenantId  String
+  productId String?
+  status    InquiryStatus @default(NEW)
+  name      String
+  company   String?
+  email     String
+  phone     String?
+  country   String?
+  message   String
+  sourceUrl String?
+  createdAt DateTime      @default(now())
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  product   Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status, createdAt])
+}
+
+model ProjectCase {
+  id           String                   @id @default(cuid())
+  tenantId     String
+  slug         String
+  category     String
+  location     String?
+  status       ContentStatus            @default(DRAFT)
+  featured     Boolean                  @default(false)
+  coverImageUrl String?
+  publishedAt  DateTime?
+  deletedAt    DateTime?
+  createdAt    DateTime                 @default(now())
+  updatedAt    DateTime                 @updatedAt
+  tenant       Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  translations ProjectCaseTranslation[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, status, deletedAt])
+}
+
+model ProjectCaseTranslation {
+  id          String      @id @default(cuid())
+  caseId      String
+  locale      Locale
+  title       String
+  summary     String?
+  description String?
+  isPublished Boolean     @default(false)
+  projectCase ProjectCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@unique([caseId, locale])
+}
+
+model NewsPost {
+  id           String                @id @default(cuid())
+  tenantId     String
+  slug         String
+  category     String
+  status       ContentStatus         @default(DRAFT)
+  coverImageUrl String?
+  publishedAt  DateTime?
+  deletedAt    DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  tenant       Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  translations NewsPostTranslation[]
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, status, deletedAt])
+}
+
+model NewsPostTranslation {
+  id          String   @id @default(cuid())
+  postId      String
+  locale      Locale
+  title       String
+  excerpt     String?
+  body        String?
+  isPublished Boolean  @default(false)
+  post        NewsPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+
+  @@unique([postId, locale])
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String?
+  actorId    String?
+  action     String
+  resource   String
+  resourceId String?
+  metadata   Json?
+  createdAt  DateTime @default(now())
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+}

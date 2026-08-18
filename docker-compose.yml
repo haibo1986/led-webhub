@@ -1,0 +1,20 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: led_webhub
+      POSTGRES_USER: postgres
+      # 生产必须通过环境变量注入强密码：POSTGRES_PASSWORD=xxx docker compose up -d
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5432:5432"
+    volumes:
+      - led_webhub_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d led_webhub"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  led_webhub_pg:
