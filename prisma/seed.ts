@@ -123,6 +123,8 @@ async function seedTenant(input: { slug: string; name: string; hostname: string;
     { locale: "ZH_CN" as const, title: "城市文化中心立面照明", summary: "以克制的线性光重塑建筑夜间秩序。", description: "通过多层次洗墙与节点重点照明，在控制眩光的同时呈现建筑材料与结构关系。" },
     { locale: "EN" as const, title: "Civic Cultural Center Facade", summary: "A restrained linear-light composition for the night-time facade.", description: "Layered wall washing and precise accents reveal the architecture while maintaining visual comfort." },
   ]) await db.projectCaseTranslation.upsert({ where: { caseId_locale: { caseId: projectCase.id, locale: translation.locale } }, update: { ...translation, isPublished: true }, create: { caseId: projectCase.id, ...translation, isPublished: true } });
+  // 案例↔产品关联：文化中心案例使用本租户种子产品（公开站案例页/产品页互链）
+  await db.projectCaseProduct.upsert({ where: { caseId_productId: { caseId: projectCase.id, productId: product.id } }, update: {}, create: { caseId: projectCase.id, productId: product.id, sortOrder: 0 } });
 
   const newsPost = await db.newsPost.upsert({
     where: { tenantId_slug: { tenantId: tenant.id, slug: "new-optical-platform-2026" } },
