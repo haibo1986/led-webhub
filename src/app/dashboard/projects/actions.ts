@@ -8,6 +8,7 @@ import { requirePermission } from "@/lib/auth/dal";
 import { tenantScope } from "@/lib/tenant/scope";
 import { getDb } from "@/lib/db";
 import { slugifyZh } from "@/lib/slugify";
+import { isTranslateConfigured, translateToEnglish } from "@/lib/translate";
 
 const schema = z.object({ slug: z.string().trim().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(), category: z.string().trim().max(60), location: z.string().trim().max(100), titleZh: z.string().trim().min(2).max(160), titleEn: z.string().trim().min(2).max(180), descriptionZh: z.string().trim().max(5000), descriptionEn: z.string().trim().max(5000) });
 function parse(formData: FormData) { return schema.safeParse(Object.fromEntries([...schema.keyof().options.map(key => [key, String(formData.get(key) ?? "")])])); }
@@ -43,7 +44,8 @@ export async function createProjectAction(formData: FormData) {
   const parsedIds = parseProductIds(formData);
   if (!parsed.success || !parsedIds.success) redirect("/dashboard/projects/new?error=invalid");
   const d = parsed.data;
-  const dup = await getDb().projectCase.findFirst({ where: { tenantId: session.tenantId, slug: d.slug }, select: { id: true } });
+  // slug 可选：未填时不预检（自动派生冲突由 P2002 兜底），避免 undefined 条件导致误判重复
+  const dup = d.slug ? await getDb().projectCase.findFirst({ where: { tenantId: session.tenantId, slug: d.slug }, select: { id: true } }) : null;
   if (dup) redirect("/dashboard/projects/new?error=duplicate");
   let itemId = "";
   try {
@@ -70,7 +72,7 @@ export async function updateProjectAction(id: string, formData: FormData) {
   const item = await getDb().projectCase.findFirst({ where: { id: parsedId.data, tenantId: session.tenantId, deletedAt: null } });
   if (!item) throw new Error("TENANT_BOUNDARY_VIOLATION");
   const d = parsed.data;
-  const dup = await getDb().projectCase.findFirst({ where: { tenantId: session.tenantId, slug: d.slug, NOT: { id: parsedId.data } }, select: { id: true } });
+  const dup = d.slug ? await getDb().projectCase.findFirst({ where: { tenantId: session.tenantId, slug: d.slug, NOT: { id: parsedId.data } }, select: { id: true } }) : null;
   if (dup) redirect(`/dashboard/projects/${parsedId.data}?error=duplicate`);
   try {
     await getDb().$transaction(async (tx) => {
@@ -117,4 +119,33 @@ export async function deleteProjectAction(id: string) {
     getDb().auditLog.create({ data: { tenantId: session.tenantId, actorId: session.userId, action: "PROJECT_DELETED", resource: "ProjectCase", resourceId: parsedId.data } }),
   ]);
   redirect("/dashboard/projects?deleted=1");
+}
+
+// 一键翻译（P2）：DeepSeek 翻译中文内容写入英文 translation（不发布，用户核对后可改）。
+// 前置条件：租户 AI 开关已开启且已配置 DEEPSEEK_API_KEY。
+export async function translateProjectAction(projectId: string) {
+  const session = await requirePermission("content:write");
+  const tenant = await getDb().tenant.findUnique({ where: { id: session.tenantId }, select: { aiEnabled: true } });
+  if (!tenant?.aiEnabled) redirect(`/dashboard/projects/${projectId}?translated=disabled`);
+  if (!isTranslateConfigured()) redirect(`/dashboard/projects/${projectId}?translated=nokey`);
+  const item = await getDb().projectCase.findFirst({ where: { id: projectId, tenantId: session.tenantId, deletedAt: null }, include: { translations: true } });
+  if (!item) throw new Error("TENANT_BOUNDARY_VIOLATION");
+  const zh = item.translations.find((t) => t.locale === "ZH_CN");
+  if (!zh?.title) redirect(`/dashboard/projects/${projectId}?translated=empty`);
+  let title: string, summary: string, description: string;
+  try {
+    [title, summary, description] = await Promise.all([
+      translateToEnglish(zh.title),
+      zh.summary ? translateToEnglish(zh.summary) : Promise.resolve(""),
+      zh.description ? translateToEnglish(zh.description) : Promise.resolve(""),
+    ]);
+  } catch {
+    redirect(`/dashboard/projects/${projectId}?translated=error`);
+  }
+  await getDb().$transaction([
+    getDb().projectCaseTranslation.upsert({ where: { caseId_locale: { caseId: projectId, locale: "EN" } }, update: { title, summary, description }, create: { caseId: projectId, locale: "EN", title, summary, description } }),
+    getDb().auditLog.create({ data: { tenantId: session.tenantId, actorId: session.userId, action: "PROJECT_TRANSLATED", resource: "ProjectCase", resourceId: projectId, metadata: { target: "EN" } } }),
+  ]);
+  revalidatePath(`/dashboard/projects/${projectId}`);
+  redirect(`/dashboard/projects/${projectId}?translated=1`);
 }
