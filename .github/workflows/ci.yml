@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  verify:
+    name: Validate · Types · Lint · Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      # postinstall 自动执行 prisma generate（src/generated 被 gitignore，CI 内重建）
+      - run: npm ci
+
+      - name: Prisma schema 校验
+        run: npm run db:validate
+
+      - name: TypeScript 类型检查
+        run: npx tsc --noEmit
+
+      - name: ESLint
+        run: npm run lint
+
+      - name: Vitest 测试
+        run: npm test
