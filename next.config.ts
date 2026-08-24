@@ -3,6 +3,8 @@ import path from "node:path";
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.resolve("."),
+  // Prisma Client runtime 保持外部包（Next 文档 serverExternalPackages 指引）
+  serverExternalPackages: ["@prisma/client"],
   poweredByHeader: false,
   async headers() {
     return [{

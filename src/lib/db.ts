@@ -1,6 +1,6 @@
 import "server-only";
 import { PrismaPg } from "@prisma/adapter-pg";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@/generated/prisma/client";
 
 // globalThis 缓存：开发热重载时复用同一实例，避免连接池泄漏
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
