@@ -38,3 +38,49 @@ export async function setTenantStatusAction(tenantId: string, status: "ACTIVE" |
   ]);
   revalidatePath("/dashboard/platform");
 }
+
+// ---------- 平台 M2：域名开通与验证 ----------
+
+const hostnameSchema = z.string().trim().min(3).max(190).regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/, "域名格式不正确");
+
+export async function addDomainAction(formData: FormData) {
+  const session = await requirePermission("platform:manage");
+  const parsedTenant = z.string().trim().min(1).max(60).safeParse(String(formData.get("tenantId") ?? ""));
+  const parsedHost = hostnameSchema.safeParse(String(formData.get("hostname") ?? "").toLowerCase());
+  if (!parsedTenant.success || !parsedHost.success) redirect("/dashboard/platform?error=domain");
+  const tenant = await getDb().tenant.findUnique({ where: { id: parsedTenant.data }, select: { id: true } });
+  if (!tenant) throw new Error("NOT_FOUND");
+  const duplicate = await getDb().domain.findUnique({ where: { hostname: parsedHost.data }, select: { id: true } });
+  if (duplicate) redirect("/dashboard/platform?error=domain_duplicate");
+  const isVerified = formData.get("verified") === "on";
+  const domain = await getDb().domain.create({ data: { tenantId: tenant.id, hostname: parsedHost.data, isVerified, isPrimary: false } });
+  await getDb().auditLog.create({ data: { tenantId: tenant.id, actorId: session.userId, action: "DOMAIN_ADDED", resource: "Domain", resourceId: domain.id, metadata: { hostname: parsedHost.data, isVerified } } });
+  revalidatePath("/dashboard/platform"); redirect("/dashboard/platform?saved=domain");
+}
+
+export async function setDomainVerifiedAction(domainId: string, verified: boolean) {
+  const session = await requirePermission("platform:manage");
+  const parsedId = z.string().trim().min(1).max(60).safeParse(domainId);
+  if (!parsedId.success || typeof verified !== "boolean") throw new Error("INVALID_INPUT");
+  const domain = await getDb().domain.findUnique({ where: { id: parsedId.data }, select: { id: true, tenantId: true, hostname: true } });
+  if (!domain) throw new Error("NOT_FOUND");
+  // 取消验证时同时撤销主域名身份（未验证域名不得作为公开站主入口）
+  await getDb().$transaction([
+    getDb().domain.update({ where: { id: domain.id }, data: { isVerified: verified, ...(verified ? {} : { isPrimary: false }) } }),
+    getDb().auditLog.create({ data: { tenantId: domain.tenantId, actorId: session.userId, action: verified ? "DOMAIN_VERIFIED" : "DOMAIN_UNVERIFIED", resource: "Domain", resourceId: domain.id, metadata: { hostname: domain.hostname } } }),
+  ]);
+  revalidatePath("/dashboard/platform");
+}
+
+export async function deleteDomainAction(domainId: string) {
+  const session = await requirePermission("platform:manage");
+  const parsedId = z.string().trim().min(1).max(60).safeParse(domainId);
+  if (!parsedId.success) throw new Error("INVALID_INPUT");
+  const domain = await getDb().domain.findUnique({ where: { id: parsedId.data }, select: { id: true, tenantId: true, hostname: true } });
+  if (!domain) throw new Error("NOT_FOUND");
+  await getDb().$transaction([
+    getDb().domain.delete({ where: { id: domain.id } }),
+    getDb().auditLog.create({ data: { tenantId: domain.tenantId, actorId: session.userId, action: "DOMAIN_DELETED", resource: "Domain", resourceId: domain.id, metadata: { hostname: domain.hostname } } }),
+  ]);
+  revalidatePath("/dashboard/platform");
+}
