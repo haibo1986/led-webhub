@@ -41,6 +41,12 @@ enum InquiryStatus {
   INVALID
 }
 
+enum EmailStatus {
+  SENT
+  FAILED
+  SKIPPED
+}
+
 enum Locale {
   ZH_CN
   EN
@@ -76,6 +82,7 @@ model Tenant {
   newsPosts       NewsPost[]
   assets          Asset[]
   inquiries       Inquiry[]
+  emailLogs       EmailLog[]
   auditLogs       AuditLog[]
 }
 
@@ -274,8 +281,26 @@ model Inquiry {
   createdAt DateTime      @default(now())
   tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   product   Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
+  emailLogs EmailLog[]
 
   @@index([tenantId, status, createdAt])
+}
+
+// 询盘邮件通知日志（审计 #7 邮件提醒）：无 SMTP 配置时记 SKIPPED，不阻塞询盘创建
+model EmailLog {
+  id        String        @id @default(cuid())
+  tenantId  String
+  inquiryId String
+  to        String
+  subject   String
+  status    EmailStatus   @default(SENT)
+  error     String?       @db.VarChar(500)
+  createdAt DateTime      @default(now())
+  tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inquiry   Inquiry       @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+  @@index([inquiryId])
 }
 
 model ProjectCase {
