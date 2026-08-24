@@ -116,6 +116,15 @@ async function seedTenant(input: { slug: string; name: string; hostname: string;
   ]) await db.newsPostTranslation.upsert({ where: { postId_locale: { postId: newsPost.id, locale: translation.locale } }, update: { ...translation, isPublished: true }, create: { postId: newsPost.id, ...translation, isPublished: true } });
 }
 
+// 平台管理员：membership 挂到主租户（登录按 memberships 取首条），role 为 PLATFORM_ADMIN 获得跨租户运营权限
+async function seedPlatformAdmin(passwordHash: string) {
+  const tenant = await db.tenant.findUnique({ where: { slug: "lumenworks" } });
+  if (!tenant) throw new Error("Primary tenant missing before platform admin seed");
+  const email = "platform@lumenworks.cn";
+  const user = await db.user.upsert({ where: { email }, update: {}, create: { email, name: "平台运营", passwordHash } });
+  await db.membership.upsert({ where: { tenantId_userId: { tenantId: tenant.id, userId: user.id } }, update: { role: "PLATFORM_ADMIN", canPublish: true }, create: { tenantId: tenant.id, userId: user.id, role: "PLATFORM_ADMIN", canPublish: true } });
+}
+
 async function main() {
   if (process.env.NODE_ENV === "production" && process.env.ALLOW_SEED !== "true") throw new Error("Refusing to seed in production. Set ALLOW_SEED=true to override.");
   // 演示密码：优先取 DEMO_PASSWORD 环境变量；未设置则随机生成。仅在新账号 create 时写入，已有账号密码不会被重置。
@@ -123,7 +132,8 @@ async function main() {
   const passwordHash = await hash(demoPassword, 12);
   await seedTenant({ slug: "lumenworks", name: "硕名康", hostname: "lumenworks.localhost", adminEmail: "admin@lumenworks.cn", editorEmail: "editor@lumenworks.cn", color: "#d99829", productPrefix: "XW", passwordHash });
   await seedTenant({ slug: "aurora", name: "极光照明", hostname: "aurora.localhost", adminEmail: "admin@aurora.cn", editorEmail: "editor@aurora.cn", color: "#4f7b83", productPrefix: "AW", passwordHash });
-  console.log(`Seeded two isolated tenants. Demo accounts password: ${demoPassword}`);
+  await seedPlatformAdmin(passwordHash);
+  console.log(`Seeded two isolated tenants plus platform admin (platform@lumenworks.cn). Demo accounts password: ${demoPassword}`);
 }
 
 main().finally(() => db.$disconnect());
