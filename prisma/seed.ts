@@ -46,6 +46,25 @@ async function seedTenant(input: { slug: string; name: string; hostname: string;
   });
   await db.auditLog.create({ data: { tenantId: tenant.id, action: "SEED_CREATED", resource: "Product", resourceId: product.id } });
 
+  // 规格参数值：为种子 SKU 补写参数（公开站规格矩阵与参数筛选依赖），已存在则按 SKU 更新
+  const variantDefs = await db.parameterDefinition.findMany({ where: { templateId: template.id }, select: { id: true, key: true } });
+  const defByKey = Object.fromEntries(variantDefs.map((d) => [d.key, d.id]));
+  const variantValues: Record<string, Record<string, string>> = {
+    [`${model}-18W`]: { power: "18", beam_angle: "24°", ip_rating: "IP65" },
+    [`${model}-24W`]: { power: "24", beam_angle: "24°", ip_rating: "IP65" },
+    [`${model}-36W`]: { power: "36", beam_angle: "45°", ip_rating: "IP66" },
+  };
+  const seededVariants = await db.productVariant.findMany({ where: { productId: product.id }, select: { id: true, sku: true } });
+  for (const variant of seededVariants) {
+    const values = variantValues[variant.sku];
+    if (!values) continue;
+    for (const [key, raw] of Object.entries(values)) {
+      const definitionId = defByKey[key];
+      if (!definitionId) continue;
+      await db.variantParameterValue.upsert({ where: { variantId_definitionId: { variantId: variant.id, definitionId } }, update: { valueJson: { raw } }, create: { variantId: variant.id, definitionId, valueJson: { raw } } });
+    }
+  }
+
   for (const item of [
     { slug: "flood-light", nameZh: "投光灯", nameEn: "Flood Light", sortOrder: 20 },
     { slug: "linear-light", nameZh: "线性灯", nameEn: "Linear Light", sortOrder: 30 },
