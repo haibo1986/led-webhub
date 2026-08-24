@@ -1,12 +1,14 @@
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Archive, CheckCircle2, Download, EyeOff, FileUp, Send, SlidersHorizontal } from "lucide-react";
+import { Archive, CheckCircle2, EyeOff, FolderOpen, Send, SlidersHorizontal } from "lucide-react";
 import { requirePermission } from "@/lib/auth/dal";
 import { getDb } from "@/lib/db";
 import { AdminPage } from "../../components/admin-page";
 import { ConfirmForm } from "../../components/confirm-form";
 import { setProductLocaleStatusAction, setProductStatusAction, updateProductAction } from "../actions";
 import { ProductForm } from "../product-form";
+import { AssetPartition } from "./asset-partition";
+import { byRoles, PARTITIONS } from "@/lib/asset-roles";
 
 export default async function EditProductPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ saved?: string; created?: string; error?: string; upload?: string }> }) {
   const session = await requirePermission("content:write"); const { id } = await params; const state = await searchParams;
@@ -19,6 +21,6 @@ export default async function EditProductPage({ params, searchParams }: { params
     <nav className="product-editor-nav"><Link className="active" href={`/dashboard/products/${id}`}>基础内容</Link><Link href={`/dashboard/products/${id}/parameters`}><SlidersHorizontal/>SKU 参数</Link></nav>
     <section className="locale-publish-panel"><div><p>独立语言发布</p><span>中文与英文页面可分别上线或下线；发布任一语言时会同步启用产品。</span></div><div className="locale-publish-actions"><form action={zh?.isPublished ? unpublishZh : publishZh}><button className={zh?.isPublished ? "is-live" : ""}><b>中文</b><span>{zh?.isPublished ? "已上线 · 点击下线" : "未上线 · 点击发布"}</span></button></form><form action={en?.isPublished ? unpublishEn : publishEn}><button className={en?.isPublished ? "is-live" : ""}><b>English</b><span>{en?.isPublished ? "Live · Unpublish" : "Offline · Publish"}</span></button></form></div></section>
     <ProductForm categories={categories} action={update} submitLabel="保存修改" value={{ categoryId: product.categoryId, model: product.model, slug: product.slug, nameZh: zh?.name ?? "", nameEn: en?.name ?? "", taglineZh: zh?.tagline ?? "", taglineEn: en?.tagline ?? "", skus: product.variants.map((v) => v.sku) }}/>
-    <section className="form-card asset-manager"><div className="form-card-title"><div><h2>技术文件与媒体</h2><p>支持图片、PDF、IES、LDT、CAD 与 STEP；最大 25MB。</p></div><FileUp/></div><form className="asset-upload" action={`/api/products/${id}/assets`} method="post" encType="multipart/form-data"><label>选择文件<input name="file" type="file" required accept=".jpg,.jpeg,.png,.webp,.pdf,.ies,.ldt,.dwg,.dxf,.step"/></label><label>文件角色<select name="role"><option value="DOCUMENT">技术文档</option><option value="PHOTOMETRY">光度文件</option><option value="CAD">工程图纸</option><option value="IMAGE">产品图片</option></select></label><label>访问级别<select name="visibility"><option value="INTERNAL">内部</option><option value="PUBLIC">公开免登录</option><option value="CONTROLLED">受控下载</option></select></label><button><FileUp/>上传并关联</button></form><div className="asset-list">{product.assets.map(({ asset, role }) => <div key={asset.id}><span><Download/><div><b>{asset.fileName}</b><small>{role} · {(Number(asset.sizeBytes) / 1024 / 1024).toFixed(2)} MB</small></div></span><em className={`visibility-${asset.visibility.toLowerCase()}`}>{asset.visibility}</em><a href={`/api/assets/${asset.id}`}>下载</a></div>)}{product.assets.length === 0 && <p className="asset-empty">尚未关联文件。</p>}</div></section>
+    <section className="form-card asset-manager"><div className="form-card-title"><div><h2>产品资料分区</h2><p>按 图片 / 尺寸图 / 技术资料 分区分组上传；公开站按相同分区展示。</p></div><FolderOpen/></div><AssetPartition productId={product.id} partition={PARTITIONS[0]} items={byRoles(product.assets, PARTITIONS[0].roles)} showThumb/><AssetPartition productId={product.id} partition={PARTITIONS[1]} items={byRoles(product.assets, PARTITIONS[1].roles)} showThumb/><AssetPartition productId={product.id} partition={PARTITIONS[2]} items={byRoles(product.assets, PARTITIONS[2].roles)} allowRoleChoice/></section>
   </AdminPage>;
 }

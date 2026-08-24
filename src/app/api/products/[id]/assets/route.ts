@@ -32,6 +32,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const form = await request.formData(); const file = form.get("file"); const visibility = String(form.get("visibility") ?? "INTERNAL"); const role = String(form.get("role") ?? "DOCUMENT").slice(0, 30);
   if (!(file instanceof File) || file.size === 0 || file.size > maxBytes) return NextResponse.redirect(new URL(`/dashboard/products/${productId}?upload=invalid`, request.url), 303);
   const extension = path.extname(file.name).toLowerCase(); if (!allowed.has(extension)) return NextResponse.redirect(new URL(`/dashboard/products/${productId}?upload=type`, request.url), 303);
+  const roleExt: Record<string, string[]> = { IMAGE: [".jpg", ".jpeg", ".png", ".webp"], CAD: [".jpg", ".jpeg", ".png", ".webp", ".dwg", ".dxf", ".step"], DOCUMENT: [".pdf", ".dwg", ".dxf", ".step"], PHOTOMETRY: [".ies", ".ldt"] };
+  if (roleExt[role] && !roleExt[role].includes(extension)) return NextResponse.redirect(new URL(`/dashboard/products/${productId}?upload=role`, request.url), 303);
   const bytes = new Uint8Array(await file.arrayBuffer());
   if (!magicMatches(extension, bytes.slice(0, 12))) return NextResponse.redirect(new URL(`/dashboard/products/${productId}?upload=type`, request.url), 303);
   // 清洗文件名：剥离 CR/LF 等控制字符，防止响应头注入

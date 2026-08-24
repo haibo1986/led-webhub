@@ -50,11 +50,50 @@ async function seedTenant(input: { slug: string; name: string; hostname: string;
     { slug: "flood-light", nameZh: "投光灯", nameEn: "Flood Light", sortOrder: 20 },
     { slug: "linear-light", nameZh: "线性灯", nameEn: "Linear Light", sortOrder: 30 },
     { slug: "in-ground-light", nameZh: "地埋灯", nameEn: "In-ground Light", sortOrder: 40 },
+    { slug: "windowsill", nameZh: "窗台灯具", nameEn: "Windowsill light fixture", sortOrder: 50 },
+    { slug: "underwater", nameZh: "水下灯具", nameEn: "Underwater lighting fixture", sortOrder: 60 },
+    { slug: "flex-strip", nameZh: "柔性灯带", nameEn: "Flexible LED strip", sortOrder: 70 },
   ]) await db.productCategory.upsert({
     where: { tenantId_slug: { tenantId: tenant.id, slug: item.slug } },
     update: { nameZh: item.nameZh, nameEn: item.nameEn, sortOrder: item.sortOrder },
     create: { tenantId: tenant.id, ...item },
   });
+
+  // 新增分类的起步版参数模板（每类独立，字段可按产品手册调整）
+  const extraTemplates: Record<string, { name: string; definitions: Record<string, string | boolean>[] }> = {
+    windowsill: { name: "窗台灯标准参数", definitions: [
+      { key: "power", labelZh: "功率", labelEn: "Power", fieldType: "number", unit: "W", groupName: "电气", isRequired: true, isFilterable: true },
+      { key: "beam_angle", labelZh: "光束角", labelEn: "Beam angle", fieldType: "text", unit: "°", groupName: "光学", isFilterable: true },
+      { key: "color_temp", labelZh: "色温", labelEn: "Color temperature", fieldType: "text", unit: "K", groupName: "光学", isFilterable: true },
+      { key: "ip_rating", labelZh: "防护等级", labelEn: "IP rating", fieldType: "select", groupName: "防护环境", isRequired: true, isFilterable: true },
+      { key: "install_method", labelZh: "安装方式", labelEn: "Mounting", fieldType: "select", groupName: "安装" },
+      { key: "dimensions", labelZh: "外形尺寸", labelEn: "Dimensions", fieldType: "text", unit: "mm", groupName: "结构" },
+    ] },
+    underwater: { name: "水下灯标准参数", definitions: [
+      { key: "power", labelZh: "功率", labelEn: "Power", fieldType: "number", unit: "W", groupName: "电气", isRequired: true, isFilterable: true },
+      { key: "voltage", labelZh: "工作电压", labelEn: "Voltage", fieldType: "text", unit: "V", groupName: "电气" },
+      { key: "beam_angle", labelZh: "光束角", labelEn: "Beam angle", fieldType: "text", unit: "°", groupName: "光学", isFilterable: true },
+      { key: "color_temp", labelZh: "色温", labelEn: "Color temperature", fieldType: "text", unit: "K", groupName: "光学", isFilterable: true },
+      { key: "ip_rating", labelZh: "防护等级", labelEn: "IP rating", fieldType: "select", groupName: "防护环境", isRequired: true, isFilterable: true },
+      { key: "depth_rating", labelZh: "适用水深", labelEn: "Depth rating", fieldType: "text", unit: "m", groupName: "防护环境", isRequired: true },
+      { key: "housing_material", labelZh: "灯体材质", labelEn: "Housing material", fieldType: "select", groupName: "材质" },
+    ] },
+    "flex-strip": { name: "柔性灯带标准参数", definitions: [
+      { key: "voltage", labelZh: "输入电压", labelEn: "Input voltage", fieldType: "select", unit: "V", groupName: "电气", isRequired: true },
+      { key: "watt_per_meter", labelZh: "每米功率", labelEn: "Watt per meter", fieldType: "number", unit: "W/m", groupName: "电气", isFilterable: true },
+      { key: "color_temp", labelZh: "色温", labelEn: "Color temperature", fieldType: "text", unit: "K", groupName: "光学", isFilterable: true },
+      { key: "cri", labelZh: "显色指数", labelEn: "CRI", fieldType: "text", unit: "Ra", groupName: "光学" },
+      { key: "led_per_meter", labelZh: "每米灯珠数", labelEn: "LEDs per meter", fieldType: "text", groupName: "结构" },
+      { key: "cut_interval", labelZh: "最小裁剪长度", labelEn: "Cut interval", fieldType: "text", unit: "mm", groupName: "结构" },
+      { key: "ip_rating", labelZh: "防护等级", labelEn: "IP rating", fieldType: "select", groupName: "防护环境", isFilterable: true },
+    ] },
+  };
+  for (const [slug, spec] of Object.entries(extraTemplates)) {
+    const target = await db.productCategory.findUnique({ where: { tenantId_slug: { tenantId: tenant.id, slug } } });
+    if (!target) continue;
+    const existing = await db.parameterTemplate.findFirst({ where: { tenantId: tenant.id, categoryId: target.id } });
+    if (!existing) await db.parameterTemplate.create({ data: { tenantId: tenant.id, categoryId: target.id, name: spec.name, definitions: { create: spec.definitions as never } } });
+  }
 
   const projectCase = await db.projectCase.upsert({
     where: { tenantId_slug: { tenantId: tenant.id, slug: "cultural-center-facade" } },
@@ -82,7 +121,7 @@ async function main() {
   // 演示密码：优先取 DEMO_PASSWORD 环境变量；未设置则随机生成。仅在新账号 create 时写入，已有账号密码不会被重置。
   const demoPassword = process.env.DEMO_PASSWORD ?? randomBytes(12).toString("base64url");
   const passwordHash = await hash(demoPassword, 12);
-  await seedTenant({ slug: "lumenworks", name: "流明光电", hostname: "lumenworks.localhost", adminEmail: "admin@lumenworks.cn", editorEmail: "editor@lumenworks.cn", color: "#d99829", productPrefix: "XW", passwordHash });
+  await seedTenant({ slug: "lumenworks", name: "硕名康", hostname: "lumenworks.localhost", adminEmail: "admin@lumenworks.cn", editorEmail: "editor@lumenworks.cn", color: "#d99829", productPrefix: "XW", passwordHash });
   await seedTenant({ slug: "aurora", name: "极光照明", hostname: "aurora.localhost", adminEmail: "admin@aurora.cn", editorEmail: "editor@aurora.cn", color: "#4f7b83", productPrefix: "AW", passwordHash });
   console.log(`Seeded two isolated tenants. Demo accounts password: ${demoPassword}`);
 }
