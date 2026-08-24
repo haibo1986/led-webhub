@@ -5,12 +5,10 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth/dal";
 import { getDb } from "@/lib/db";
+import { parseProductForm } from "@/lib/products/schema";
+import { diffVariants } from "@/lib/products/variant-diff";
 
-const productSchema = z.object({ categoryId: z.string().min(1), model: z.string().trim().min(2).max(60), slug: z.string().trim().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/), nameZh: z.string().trim().min(2).max(120), nameEn: z.string().trim().min(2).max(160), taglineZh: z.string().trim().max(200), taglineEn: z.string().trim().max(240), skus: z.array(z.string().trim().min(2).max(80)).min(1).max(30).refine((items) => new Set(items).size === items.length, { message: "SKU 不允许重复" }) });
-
-function parse(formData: FormData) {
-  return productSchema.safeParse({ categoryId: formData.get("categoryId"), model: formData.get("model"), slug: formData.get("slug"), nameZh: formData.get("nameZh"), nameEn: formData.get("nameEn"), taglineZh: formData.get("taglineZh") ?? "", taglineEn: formData.get("taglineEn") ?? "", skus: String(formData.get("skus") ?? "").split(/\r?\n|,/).map((v) => v.trim()).filter(Boolean) });
-}
+const parse = parseProductForm;
 
 export async function createProductAction(formData: FormData) {
   const session = await requirePermission("content:write"); const parsed = parse(formData);
@@ -44,8 +42,7 @@ export async function updateProductAction(productId: string, formData: FormData)
       for (const item of [["ZH_CN", parsed.data.nameZh, parsed.data.taglineZh], ["EN", parsed.data.nameEn, parsed.data.taglineEn]] as const) await tx.productTranslation.upsert({ where: { productId_locale: { productId, locale: item[0] } }, update: { name: item[1], tagline: item[2] }, create: { productId, locale: item[0], name: item[1], tagline: item[2] } });
       // diff 式更新变体：只删被移除的 SKU、只增新 SKU，未变的保留原 id，避免级联清空参数值
       const existingVariants = await tx.productVariant.findMany({ where: { productId }, select: { id: true, sku: true } });
-      const toDelete = existingVariants.filter((v) => !parsed.data.skus.includes(v.sku)).map((v) => v.id);
-      const toCreate = parsed.data.skus.filter((sku) => !existingVariants.some((v) => v.sku === sku));
+      const { toDeleteIds: toDelete, toCreateSkus: toCreate } = diffVariants(existingVariants, parsed.data.skus);
       if (toDelete.length) await tx.productVariant.deleteMany({ where: { id: { in: toDelete } } });
       for (const [i, sku] of parsed.data.skus.entries()) await tx.productVariant.updateMany({ where: { productId, sku, id: { notIn: toDelete } }, data: { sortOrder: i } });
       if (toCreate.length) await tx.productVariant.createMany({ data: toCreate.map((sku) => ({ productId, sku, name: sku, sortOrder: parsed.data.skus.indexOf(sku) })) });
