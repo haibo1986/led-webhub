@@ -5,6 +5,8 @@
 **Diagnostic**: Codex unavailable — manual analysis. codex 二进制位于 Windows npm-global（/mnt/c/Users/周海波/.npm-global/codex），缺 Linux 平台二进制 @openai/codex-linux-x64。修复：在 WSL 内 `npm install -g @openai/codex@latest`（需用户确认）。
 **Status values**: open | fixed | not-fixed | partial | regressed | skipped (severity filter) | skipped (user stop)
 
+**Verify（第二轮）**: Codex verify runner stalled（600s 超时，与 08-18 现象一致，云端服务侧问题；本地 Linux 二进制已由用户装好）→ 手动 verify：6 条修复逐条在代码中确认 + tsc/73 测试/build 三绿证据 → 全部 FIXED。
+
 | # | File | Line | Severity | Dimension | Finding | Suggested fix | Status | Round |
 |---|------|------|----------|-----------|---------|---------------|--------|-------|
 | 1 | src/lib/mail.ts | sendMail | High | 1 逻辑 | `sendMail` 每次创建新 nodemailer transport 且从不 `close()`——SMTP 连接池随询盘量累积泄漏 | try/finally 中调用 `transport.close()` | fixed | 1 |
