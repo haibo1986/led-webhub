@@ -10,8 +10,8 @@ import { getDb } from "@/lib/db";
 import { slugifyZh } from "@/lib/slugify";
 import { isTranslateConfigured, translateToEnglish } from "@/lib/translate";
 
-const schema = z.object({ slug: z.string().trim().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(), category: z.string().trim().max(60), location: z.string().trim().max(100), titleZh: z.string().trim().min(2).max(160), titleEn: z.string().trim().min(2).max(180), descriptionZh: z.string().trim().max(5000), descriptionEn: z.string().trim().max(5000) });
-function parse(formData: FormData) { return schema.safeParse(Object.fromEntries([...schema.keyof().options.map(key => [key, String(formData.get(key) ?? "")])])); }
+const schema = z.object({ slug: z.string().trim().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(), category: z.string().trim().max(60), location: z.string().trim().max(100), titleZh: z.string().trim().min(2).max(160), titleEn: z.string().trim().max(180).optional(), descriptionZh: z.string().trim().max(5000), descriptionEn: z.string().trim().max(5000) });
+function parse(formData: FormData) { const raw = Object.fromEntries([...schema.keyof().options.map(key => [key, String(formData.get(key) ?? "")])]); return schema.safeParse({ ...raw, slug: raw.slug.trim() || undefined, titleEn: raw.titleEn.trim() || undefined }); }
 
 // slug 派生：用户未填时从中文标题生成拼音 slug；生成失败回退随机后缀
 function deriveSlug(titleZh: string, manual?: string) {
@@ -50,7 +50,7 @@ export async function createProjectAction(formData: FormData) {
   let itemId = "";
   try {
     await getDb().$transaction(async (tx) => {
-      const item = await tx.projectCase.create({ data: { tenantId: session.tenantId, slug: deriveSlug(d.titleZh, d.slug), category: d.category, location: d.location || null, translations: { create: [{ locale: "ZH_CN", title: d.titleZh, summary: deriveSummary(d.descriptionZh), description: d.descriptionZh }, { locale: "EN", title: d.titleEn, summary: deriveSummary(d.descriptionEn), description: d.descriptionEn }] } } });
+      const item = await tx.projectCase.create({ data: { tenantId: session.tenantId, slug: deriveSlug(d.titleZh, d.slug), category: d.category, location: d.location || null, translations: { create: [{ locale: "ZH_CN", title: d.titleZh, summary: deriveSummary(d.descriptionZh), description: d.descriptionZh }, { locale: "EN", title: d.titleEn ?? "", summary: deriveSummary(d.descriptionEn), description: d.descriptionEn }] } } });
       await syncCaseProducts(tx, session.tenantId, item.id, parsedIds.data);
       await tx.auditLog.create({ data: { tenantId: session.tenantId, actorId: session.userId, action: "PROJECT_CREATED", resource: "ProjectCase", resourceId: item.id } });
       itemId = item.id;
@@ -78,7 +78,7 @@ export async function updateProjectAction(id: string, formData: FormData) {
     await getDb().$transaction(async (tx) => {
       // URL 稳定：编辑时保留现有 slug，仅当用户显式填写才更新（首次创建才自动派生）
       await tx.projectCase.update({ where: { id: parsedId.data }, data: { slug: d.slug || item.slug, category: d.category, location: d.location || null } });
-      for (const tr of [["ZH_CN", d.titleZh, d.descriptionZh], ["EN", d.titleEn, d.descriptionEn]] as const) {
+      for (const tr of [["ZH_CN", d.titleZh, d.descriptionZh], ["EN", d.titleEn ?? "", d.descriptionEn]] as const) {
         await tx.projectCaseTranslation.upsert({ where: { caseId_locale: { caseId: parsedId.data, locale: tr[0] } }, update: { title: tr[1], summary: deriveSummary(tr[2]), description: tr[2] }, create: { caseId: parsedId.data, locale: tr[0], title: tr[1], summary: deriveSummary(tr[2]), description: tr[2] } });
       }
       await syncCaseProducts(tx, session.tenantId, parsedId.data, parsedIds.data);
@@ -99,6 +99,8 @@ export async function setProjectStatusAction(id: string, locale: "ZH_CN" | "EN",
   const session = await requirePermission("content:publish");
   const item = await getDb().projectCase.findFirst({ where: tenantScope(session.tenantId, { id: parsedId.data, deletedAt: null }), include: { translations: { where: { locale: parsedLocale.data }, take: 1 } } });
   if (!item?.translations[0]) throw new Error("TENANT_BOUNDARY_VIOLATION");
+  // 发布守卫：标题为空（未填写/未翻译）不可发布该语言
+  if (publish && !item.translations[0].title.trim()) redirect(`/dashboard/projects/${parsedId.data}?translated=empty`);
   await getDb().$transaction([
     getDb().projectCaseTranslation.update({ where: { id: item.translations[0].id }, data: { isPublished: publish } }),
     getDb().projectCase.update({ where: { id: parsedId.data }, data: publish ? { status: "PUBLISHED", publishedAt: new Date() } : {} }),
