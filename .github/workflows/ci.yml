@@ -34,3 +34,51 @@ jobs:
 
       - name: Vitest 测试
         run: npm test
+
+  e2e:
+    name: E2E (Playwright)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: led_webhub
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d led_webhub"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/led_webhub?schema=public
+      SESSION_SECRET: ci-e2e-only-secret-not-for-production
+      DEFAULT_TENANT_SLUG: lumenworks
+      DEMO_PASSWORD: WebHubDev2026
+      E2E_PASSWORD: WebHubDev2026
+      PLAYWRIGHT_WEBSERVER: npm run start
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - run: npm ci
+
+      - name: 数据库迁移
+        run: npx prisma migrate deploy
+
+      - name: 种子数据
+        run: npm run db:seed
+
+      - name: 安装 Chromium 与系统依赖
+        run: npx playwright install --with-deps chromium
+
+      - name: 生产构建
+        run: npm run build
+
+      - name: Playwright E2E
+        run: npx playwright test

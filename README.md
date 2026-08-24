@@ -4,19 +4,19 @@
 
 ## 当前基线
 
-- Next.js 16 App Router + React 19 + TypeScript
-- PostgreSQL + Prisma 7
+- Next.js 16 App Router（Turbopack）+ React 19 + TypeScript
+- PostgreSQL + Prisma 7（现代 `prisma-client` generator，输出 `src/generated/prisma`）
 - 企业官网首套“工业编辑感”模板
-- 企业管理工作台
+- 企业管理工作台与平台运营后台（租户开通/停用、域名开通/验证、跨租户审计查看）
 - 租户、域名、成员、角色和审计数据模型
-- 产品分类、动态参数模板、产品、多 SKU 和中英文内容模型
-- 文件公开、受控、内部三种可见性
-- 询盘归属与状态流转模型
+- 产品分类、动态参数模板、产品、多 SKU、产品标签和中英文内容模型
+- 文件公开、受控、内部三种可见性；产品资料三分区（图片/尺寸图/技术资料）与公开站画廊
+- 询盘归属、状态流转、内部跟进备注与 SMTP 邮件提醒（未配置 SMTP 时优雅降级）
 - JWT HttpOnly Session、RBAC 和租户边界守卫
-- 真实登录、退出与会话撤权回查
-- 企业设置保存和审计
-- 产品新增、编辑、多 SKU、发布、下架和软删除
-- 分类模板驱动的 SKU 动态参数矩阵
+- 企业设置：品牌、导航配置、首页模块、SEO 默认值与域名主切换
+- 产品 Excel 批量导入（模板下载 / 解析校验 / 确认导入向导）
+- 公开站产品搜索、分类筛选、参数筛选（isFilterable）与分页
+- 案例↔产品双向关联展示
 - 本地开发文件存储、产品附件关联和鉴权下载
 - AI 总开关默认关闭；MVP 不含访客侧 AI
 
@@ -40,9 +40,10 @@ npm run dev
 
 开发种子账号：
 
-- 流明光电管理员：`admin@lumenworks.cn`
-- 流明光电编辑：`editor@lumenworks.cn`
+- 硕名康管理员：`admin@lumenworks.cn`
+- 硕名康编辑：`editor@lumenworks.cn`
 - 极光照明管理员：`admin@aurora.cn`
+- 平台运营：`platform@lumenworks.cn`（PLATFORM_ADMIN，可访问平台运营后台）
 - 演示密码：由 `DEMO_PASSWORD` 环境变量指定；未设置时随机生成并在 seed 输出中打印一次（仅新账号生效，重跑 seed 不会重置已有账号密码）
 
 seed 在生产环境默认拒绝执行（需 `ALLOW_SEED=true` 显式覆盖）。
@@ -59,15 +60,23 @@ seed 在生产环境默认拒绝执行（需 `ALLOW_SEED=true` 显式覆盖）�
 npm run db:validate
 npm run lint
 npm run build
+npm test                  # vitest：63 单元测试 + 租户边界矩阵（mock DB，不连库）
+npx playwright test       # E2E：公开站核心流程 + 租户越权（需 Chromium 系统库）
 ```
+
+E2E 前置：`e2e/global-setup.ts` 会把演示账号密码重置为 `E2E_PASSWORD`（默认 `WebHubDev2026`）。首次运行前安装浏览器：`npx playwright install chromium`（Linux 缺系统库时再执行 `sudo npx playwright install-deps chromium`）。
+
+CI（GitHub Actions）：push/PR 触发 validate + typegen/tsc + lint + vitest；e2e job 带 postgres 服务容器跑 migrate + seed + build + Playwright。
 
 ## 下一批开发
 
-1. 产品动态参数模板与规格参数录入
-2. 文件上传、引用检查与公开/受控下载
-3. 中文和英文独立预览与官网动态渲染
-4. 询盘表单、处理状态与邮件提醒
-5. Playwright 租户越权及关键流程测试
+1. ~~产品动态参数模板与规格参数录入~~ ✅
+2. ~~文件上传、引用检查与公开/受控下载~~ ✅
+3. ~~中文和英文独立预览与官网动态渲染~~ ✅
+4. ~~询盘表单、处理状态与邮件提醒~~ ✅
+5. ~~Playwright 租户越权及关键流程测试~~ ✅
+6. 参数模板分配（平台预置库→租户复制，需求待澄清）
+7. P2 业务实体：单页内容区块、FAQ、回收站、套餐/配额、AI 用量账本
 
 ## 部署与租户路由
 
