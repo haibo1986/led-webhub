@@ -258,6 +258,7 @@ model Asset {
   tenant          Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   uploadedBy      User?           @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
   products        ProductAsset[]
+  cases           ProjectCaseAsset[]
 
   @@index([tenantId, visibility])
 }
@@ -344,6 +345,19 @@ model ProjectCaseProduct {
   @@index([productId])
 }
 
+// 案例图片关联：role 为 COVER（封面，sortOrder 最小者优先）或 IMAGE（详情画廊）
+model ProjectCaseAsset {
+  caseId    String
+  assetId   String
+  role      String      @default("IMAGE")
+  sortOrder Int         @default(0)
+  case      ProjectCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  asset     Asset       @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@id([caseId, assetId])
+  @@index([assetId])
+}
+
 // 询盘邮件通知日志（审计 #7 邮件提醒）：无 SMTP 配置时记 SKIPPED，不阻塞询盘创建
 model EmailLog {
   id        String        @id @default(cuid())
@@ -377,6 +391,7 @@ model ProjectCase {
   tenant       Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   translations ProjectCaseTranslation[]
   products     ProjectCaseProduct[]
+  images       ProjectCaseAsset[]
 
   @@unique([tenantId, slug])
   @@index([tenantId, status, deletedAt])

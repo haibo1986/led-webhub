@@ -16,11 +16,12 @@ export function alternatesFor(locale: SiteLocale, path: string) {
 }
 
 // 公开页统一元数据构造器。absolute 用于首页（避免「企业名 | 企业名」模板拼接）。
-export async function publicMetadata(locale: SiteLocale, path: string, title: { "zh-CN": string; en: string }, opts?: { description?: { "zh-CN"?: string; en?: string }; absolute?: boolean }): Promise<Metadata> {
+export async function publicMetadata(locale: SiteLocale, path: string, title: { "zh-CN": string; en: string }, opts?: { description?: { "zh-CN"?: string; en?: string }; absolute?: boolean; openGraph?: Metadata["openGraph"] }): Promise<Metadata> {
   return {
     metadataBase: await siteBaseUrl(),
     title: opts?.absolute ? { absolute: title[locale] } : title[locale],
     description: opts?.description?.[locale] ?? undefined,
     alternates: alternatesFor(locale, path),
+    ...(opts?.openGraph ? { openGraph: opts.openGraph } : {}),
   };
 }
