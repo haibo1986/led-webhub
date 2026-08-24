@@ -24,7 +24,10 @@ jobs:
         run: npm run db:validate
 
       - name: TypeScript 类型检查
-        run: npx tsc --noEmit
+        # PageProps/LayoutProps 等路由全局类型由 next typegen 生成到 .next/types（tsconfig 已 include）
+        run: |
+          npx next typegen
+          npx tsc --noEmit
 
       - name: ESLint
         run: npm run lint
