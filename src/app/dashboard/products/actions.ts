@@ -10,6 +10,15 @@ import { diffVariants } from "@/lib/products/variant-diff";
 
 const parse = parseProductForm;
 
+// 标签同步（set 式）：清空后按去重名单重建连接，缺失标签自动创建（租户级共享）
+async function syncTags(tx: { productTagLink: { deleteMany: (args: { where: { productId: string } }) => Promise<unknown>; create: (args: { data: { productId: string; tagId: string } }) => Promise<unknown> }; productTag: { upsert: (args: { where: { tenantId_name: { tenantId: string; name: string } }; update: Record<string, never>; create: { tenantId: string; name: string } }) => Promise<{ id: string }> } }, tenantId: string, productId: string, names: string[]) {
+  await tx.productTagLink.deleteMany({ where: { productId } });
+  for (const name of new Set(names)) {
+    const tag = await tx.productTag.upsert({ where: { tenantId_name: { tenantId, name } }, update: {}, create: { tenantId, name } });
+    await tx.productTagLink.create({ data: { productId, tagId: tag.id } });
+  }
+}
+
 export async function createProductAction(formData: FormData) {
   const session = await requirePermission("content:write"); const parsed = parse(formData);
   if (!parsed.success) redirect("/dashboard/products/new?error=invalid");
@@ -17,15 +26,19 @@ export async function createProductAction(formData: FormData) {
   if (!category) throw new Error("TENANT_BOUNDARY_VIOLATION");
   const duplicate = await getDb().product.findFirst({ where: { tenantId: session.tenantId, OR: [{ slug: parsed.data.slug }, { model: parsed.data.model }] }, select: { id: true } });
   if (duplicate) redirect("/dashboard/products/new?error=duplicate");
-  let product;
+  let productId = "";
   try {
-    product = await getDb().product.create({ data: { tenantId: session.tenantId, categoryId: category.id, model: parsed.data.model, slug: parsed.data.slug, translations: { create: [{ locale: "ZH_CN", name: parsed.data.nameZh, tagline: parsed.data.taglineZh }, { locale: "EN", name: parsed.data.nameEn, tagline: parsed.data.taglineEn }] }, variants: { create: parsed.data.skus.map((sku, i) => ({ sku, name: sku, sortOrder: i })) } } });
+    await getDb().$transaction(async (tx) => {
+      const product = await tx.product.create({ data: { tenantId: session.tenantId, categoryId: category.id, model: parsed.data.model, slug: parsed.data.slug, translations: { create: [{ locale: "ZH_CN", name: parsed.data.nameZh, tagline: parsed.data.taglineZh }, { locale: "EN", name: parsed.data.nameEn, tagline: parsed.data.taglineEn }] }, variants: { create: parsed.data.skus.map((sku, i) => ({ sku, name: sku, sortOrder: i })) } } });
+      await syncTags(tx, session.tenantId, product.id, parsed.data.tags);
+      await tx.auditLog.create({ data: { tenantId: session.tenantId, actorId: session.userId, action: "PRODUCT_CREATED", resource: "Product", resourceId: product.id } });
+      productId = product.id;
+    });
   } catch (error) {
     if ((error as { code?: string }).code === "P2002") redirect("/dashboard/products/new?error=duplicate");
     throw error;
   }
-  await getDb().auditLog.create({ data: { tenantId: session.tenantId, actorId: session.userId, action: "PRODUCT_CREATED", resource: "Product", resourceId: product.id } });
-  revalidatePath("/dashboard/products"); redirect(`/dashboard/products/${product.id}?created=1`);
+  revalidatePath("/dashboard/products"); redirect(`/dashboard/products/${productId}?created=1`);
 }
 
 export async function updateProductAction(productId: string, formData: FormData) {
@@ -46,6 +59,7 @@ export async function updateProductAction(productId: string, formData: FormData)
       if (toDelete.length) await tx.productVariant.deleteMany({ where: { id: { in: toDelete } } });
       for (const [i, sku] of parsed.data.skus.entries()) await tx.productVariant.updateMany({ where: { productId, sku, id: { notIn: toDelete } }, data: { sortOrder: i } });
       if (toCreate.length) await tx.productVariant.createMany({ data: toCreate.map((sku) => ({ productId, sku, name: sku, sortOrder: parsed.data.skus.indexOf(sku) })) });
+      await syncTags(tx, session.tenantId, productId, parsed.data.tags);
       await tx.auditLog.create({ data: { tenantId: session.tenantId, actorId: session.userId, action: "PRODUCT_UPDATED", resource: "Product", resourceId: productId } });
     });
   } catch (error) {

@@ -10,6 +10,7 @@ export const productSchema = z.object({
   taglineZh: z.string().trim().max(200),
   taglineEn: z.string().trim().max(240),
   skus: z.array(z.string().trim().min(2).max(80)).min(1).max(30).refine((items) => new Set(items).size === items.length, { message: "SKU 不允许重复" }),
+  tags: z.array(z.string().trim().min(1).max(30)).max(10).default([]),
 });
 
 export function parseProductForm(formData: FormData) {
@@ -22,5 +23,6 @@ export function parseProductForm(formData: FormData) {
     taglineZh: formData.get("taglineZh") ?? "",
     taglineEn: formData.get("taglineEn") ?? "",
     skus: String(formData.get("skus") ?? "").split(/\r?\n|,/).map((v) => v.trim()).filter(Boolean),
+    tags: String(formData.get("tags") ?? "").split(/[,，\n]/).map((v) => v.trim()).filter(Boolean),
   });
 }

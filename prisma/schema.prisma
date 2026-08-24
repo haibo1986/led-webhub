@@ -84,6 +84,8 @@ model Tenant {
   assets          Asset[]
   inquiries       Inquiry[]
   emailLogs       EmailLog[]
+  inquiryNotes    InquiryNote[]
+  productTags     ProductTag[]
   auditLogs       AuditLog[]
 }
 
@@ -109,6 +111,7 @@ model User {
   memberships    Membership[]
   auditLogs      AuditLog[]
   uploadedAssets Asset[]
+  inquiryNotes   InquiryNote[]
 }
 
 model Membership {
@@ -192,6 +195,8 @@ model Product {
   variants     ProductVariant[]
   assets       ProductAsset[]
   inquiries    Inquiry[]
+  tags         ProductTagLink[]
+  cases        ProjectCaseProduct[]
 
   @@unique([tenantId, slug])
   @@unique([tenantId, model])
@@ -283,8 +288,59 @@ model Inquiry {
   tenant    Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   product   Product?      @relation(fields: [productId], references: [id], onDelete: SetNull)
   emailLogs EmailLog[]
+  notes     InquiryNote[]
 
   @@index([tenantId, status, createdAt])
+}
+
+// 询盘内部处理记录/备注（审计 #26）：团队成员在询盘上的跟进轨迹
+model InquiryNote {
+  id        String   @id @default(cuid())
+  tenantId  String
+  inquiryId String
+  authorId  String
+  content   String   @db.VarChar(2000)
+  createdAt DateTime @default(now())
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inquiry   Inquiry  @relation(fields: [inquiryId], references: [id], onDelete: Cascade)
+  author    User     @relation(fields: [authorId], references: [id], onDelete: Restrict)
+
+  @@index([inquiryId, createdAt])
+}
+
+// 产品标签（审计 #26）：租户级共享的短关键词，用于公开站产品卡片与后续筛选
+model ProductTag {
+  id        String           @id @default(cuid())
+  tenantId  String
+  name      String
+  createdAt DateTime         @default(now())
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  products  ProductTagLink[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model ProductTagLink {
+  productId String
+  tagId     String
+  product   Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  tag       ProductTag @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([productId, tagId])
+  @@index([tagId])
+}
+
+// 案例↔产品关联（审计 #26）：案例页展示所用产品、产品页反向展示案例
+model ProjectCaseProduct {
+  caseId    String
+  productId String
+  sortOrder Int      @default(0)
+  case      ProjectCase @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  product   Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([caseId, productId])
+  @@index([productId])
 }
 
 // 询盘邮件通知日志（审计 #7 邮件提醒）：无 SMTP 配置时记 SKIPPED，不阻塞询盘创建
@@ -319,6 +375,7 @@ model ProjectCase {
   updatedAt    DateTime                 @updatedAt
   tenant       Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   translations ProjectCaseTranslation[]
+  products     ProjectCaseProduct[]
 
   @@unique([tenantId, slug])
   @@index([tenantId, status, deletedAt])

@@ -44,4 +44,20 @@ describe("parseProductForm", () => {
     expect(r.success).toBe(true);
     if (r.success) expect(r.data.skus).toEqual(["A-1", "B-2"]);
   });
+
+  it("标签按逗号/中文逗号/换行拆分，缺省为空数组，超过 10 个被拒绝", () => {
+    const fd = form();
+    fd.set("tags", "户外，洗墙,IP65\n防水");
+    const r = parseProductForm(fd);
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.tags).toEqual(["户外", "洗墙", "IP65", "防水"]);
+
+    const noTags = parseProductForm(form());
+    expect(noTags.success).toBe(true);
+    if (noTags.success) expect(noTags.data.tags).toEqual([]);
+
+    const tooMany = form();
+    tooMany.set("tags", Array.from({ length: 11 }, (_, i) => `t${i}`).join(","));
+    expect(parseProductForm(tooMany).success).toBe(false);
+  });
 });
