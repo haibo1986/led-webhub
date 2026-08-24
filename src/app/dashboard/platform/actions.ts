@@ -76,11 +76,12 @@ export async function deleteDomainAction(domainId: string) {
   const session = await requirePermission("platform:manage");
   const parsedId = z.string().trim().min(1).max(60).safeParse(domainId);
   if (!parsedId.success) throw new Error("INVALID_INPUT");
-  const domain = await getDb().domain.findUnique({ where: { id: parsedId.data }, select: { id: true, tenantId: true, hostname: true } });
+  const domain = await getDb().domain.findUnique({ where: { id: parsedId.data }, select: { id: true, tenantId: true, hostname: true, isPrimary: true } });
   if (!domain) throw new Error("NOT_FOUND");
+  // wasPrimary 记录删除时是否为主域名（主域名删除后公开站回退 DEFAULT_TENANT_SLUG，审计留痕可回溯）
   await getDb().$transaction([
     getDb().domain.delete({ where: { id: domain.id } }),
-    getDb().auditLog.create({ data: { tenantId: domain.tenantId, actorId: session.userId, action: "DOMAIN_DELETED", resource: "Domain", resourceId: domain.id, metadata: { hostname: domain.hostname } } }),
+    getDb().auditLog.create({ data: { tenantId: domain.tenantId, actorId: session.userId, action: "DOMAIN_DELETED", resource: "Domain", resourceId: domain.id, metadata: { hostname: domain.hostname, wasPrimary: domain.isPrimary } } }),
   ]);
   revalidatePath("/dashboard/platform");
 }

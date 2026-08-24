@@ -1,5 +1,15 @@
-import { describe, expect, it } from "vitest";
-import { isMailConfigured, loadMailConfig, renderInquiryMail } from "./mail";
+import { describe, expect, it, vi } from "vitest";
+import { isMailConfigured, loadMailConfig, renderInquiryMail, sendMail } from "./mail";
+
+vi.mock("nodemailer", () => ({
+  default: {
+    createTransport: vi.fn(() => ({
+      sendMail: vi.fn().mockResolvedValue({ messageId: "x" }),
+      close: vi.fn(),
+    })),
+  },
+}));
+import nodemailer from "nodemailer";
 
 const fullEnv = { SMTP_HOST: "smtp.example.com", SMTP_PORT: "465", SMTP_SECURE: "true", SMTP_USER: "notify@example.com", SMTP_PASS: "secret", SMTP_FROM: "notify@example.com" };
 
@@ -56,5 +66,22 @@ describe("renderInquiryMail（询盘邮件模板）", () => {
     expect(mail.html).not.toContain("<script>");
     expect(mail.html).toContain("&lt;script&gt;");
     expect(mail.html).toContain("&lt;img");
+  });
+});
+
+describe("sendMail（transport 生命周期）", () => {
+  it("发送后 close transport（防连接池泄漏），发送失败也 close", async () => {
+    const mk = vi.mocked(nodemailer.createTransport);
+    await sendMail({ host: "smtp.example.com", port: 465, secure: true, user: "u", pass: "p", from: "f@e.com" }, { to: "t@e.com", subject: "s", text: "t", html: "<p>h</p>" });
+    expect(mk).toHaveBeenCalledOnce();
+    const instance = mk.mock.results[0].value;
+    expect(instance.close).toHaveBeenCalled();
+
+    // 失败路径同样 close
+    mk.mockClear();
+    const failing = { sendMail: vi.fn().mockRejectedValue(new Error("smtp down")), close: vi.fn() };
+    mk.mockReturnValueOnce(failing as never);
+    await expect(sendMail({ host: "smtp.example.com", port: 465, secure: true, user: "u", pass: "p", from: "f@e.com" }, { to: "t@e.com", subject: "s", text: "t", html: "<p>h</p>" })).rejects.toThrow("smtp down");
+    expect(failing.close).toHaveBeenCalled();
   });
 });

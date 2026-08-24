@@ -4,7 +4,8 @@ export type ParamFilter = { key: string; value: string };
 
 const FILTER_KEY_RE = /^[a-z][a-z0-9_]{0,40}$/;
 
-// 从 URLSearchParams 提取参数筛选（未过滤的值直接丢弃，防注入无意义查询）
+// 从 URLSearchParams 提取参数筛选（未过滤的值直接丢弃，防注入无意义查询）。
+// 同名参数多值（如 ?f_power=18&f_power=24）后者覆盖前者，避免 AND 组合下恒为空结果。
 export function parseParamFilters(params: URLSearchParams): ParamFilter[] {
   const filters: ParamFilter[] = [];
   for (const [name, value] of params.entries()) {
@@ -12,7 +13,9 @@ export function parseParamFilters(params: URLSearchParams): ParamFilter[] {
     const key = name.slice(2);
     const trimmed = value.trim();
     if (!FILTER_KEY_RE.test(key) || !trimmed || trimmed.length > 200) continue;
-    filters.push({ key, value: trimmed });
+    const existing = filters.findIndex((f) => f.key === key);
+    if (existing >= 0) filters[existing] = { key, value: trimmed };
+    else filters.push({ key, value: trimmed });
   }
   return filters;
 }

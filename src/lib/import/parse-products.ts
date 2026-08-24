@@ -55,6 +55,7 @@ export async function parseProductWorkbook(
   const rows: ParsedRow[] = [];
   const seenSkus = new Set<string>();
   const rowLimit = Math.min(sheet.rowCount, MAX_ROWS + 1);
+  if (sheet.rowCount > MAX_ROWS + 1) issues.push({ row: MAX_ROWS + 1, level: "warning", message: `文件超过 ${MAX_ROWS} 行数据，仅处理前 ${MAX_ROWS} 行` });
   for (let r = 2; r <= rowLimit; r++) {
     const row = sheet.getRow(r);
     const get = (index: number) => {

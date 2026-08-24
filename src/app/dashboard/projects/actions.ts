@@ -13,11 +13,11 @@ function parse(formData: FormData) { return schema.safeParse(Object.fromEntries(
 const productIdsSchema = z.array(z.string().trim().min(1).max(60)).max(50).default([]);
 function parseProductIds(formData: FormData) { return productIdsSchema.safeParse(formData.getAll("productIds")); }
 
-// 案例↔产品关联同步（审计 #26）：set 式重建；所有 id 必须先通过本租户存在性校验
-async function syncCaseProducts(tx: { projectCaseProduct: { deleteMany: (args: { where: { caseId: string } }) => Promise<unknown>; createMany: (args: { data: { caseId: string; productId: string; sortOrder: number }[] }) => Promise<unknown> } }, tenantId: string, caseId: string, productIds: string[]) {
+// 案例↔产品关联同步（审计 #26）：set 式重建；所有 id 必须先通过本租户存在性校验（校验在事务内执行，避免软删竞态）
+async function syncCaseProducts(tx: { projectCaseProduct: { deleteMany: (args: { where: { caseId: string } }) => Promise<unknown>; createMany: (args: { data: { caseId: string; productId: string; sortOrder: number }[] }) => Promise<unknown> }; product: { findMany: (args: { where: { id: { in: string[] }; tenantId: string; deletedAt: null }; select: { id: true } }) => Promise<{ id: string }[]> } }, tenantId: string, caseId: string, productIds: string[]) {
   const ids = [...new Set(productIds)];
   if (ids.length) {
-    const owned = await getDb().product.findMany({ where: { id: { in: ids }, tenantId, deletedAt: null }, select: { id: true } });
+    const owned = await tx.product.findMany({ where: { id: { in: ids }, tenantId, deletedAt: null }, select: { id: true } });
     if (owned.length !== ids.length) throw new Error("TENANT_BOUNDARY_VIOLATION");
   }
   await tx.projectCaseProduct.deleteMany({ where: { caseId } });

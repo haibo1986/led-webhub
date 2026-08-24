@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getValidatedSession } from "@/lib/auth/dal";
@@ -53,7 +54,9 @@ export async function POST(request: Request) {
     if (existingModels.has(model)) { failed.push({ model, reason: "型号已存在" }); continue; }
     if (new Set(group.map((r) => r.sku)).size !== group.length) { failed.push({ model, reason: "组内 SKU 重复" }); continue; }
     if (group.some((r) => existingSkus.has(r.sku))) { failed.push({ model, reason: "SKU 已存在" }); continue; }
-    const slug = first.slug || model.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    // 纯中文等无 ASCII 的 model 会生成空 slug——回退随机后缀，避免空串入库或 P2002 误导
+    const generated = model.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    const slug = first.slug || generated || `p-${randomUUID().slice(0, 8)}`;
     try {
       await getDb().$transaction(async (tx) => {
         const product = await tx.product.create({

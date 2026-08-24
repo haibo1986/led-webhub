@@ -53,5 +53,9 @@ function escapeHtml(value: string) {
 
 export async function sendMail(config: MailConfig, mail: { to: string; subject: string; text: string; html: string }): Promise<void> {
   const transport = nodemailer.createTransport({ host: config.host, port: config.port, secure: config.secure, auth: { user: config.user, pass: config.pass } });
-  await transport.sendMail({ from: config.from, to: mail.to, subject: mail.subject, text: mail.text, html: mail.html });
+  try {
+    await transport.sendMail({ from: config.from, to: mail.to, subject: mail.subject, text: mail.text, html: mail.html });
+  } finally {
+    transport.close();
+  }
 }

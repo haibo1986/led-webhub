@@ -22,6 +22,11 @@ describe("parseParamFilters（URL 参数提取）", () => {
     sp.set("f_power", "x".repeat(201));
     expect(parseParamFilters(sp)).toEqual([]);
   });
+
+  it("同名参数多值：后者覆盖前者（防 AND 组合恒空）", () => {
+    const sp = new URLSearchParams("?f_power=18&f_power=24&f_ip_rating=IP65");
+    expect(parseParamFilters(sp)).toEqual([{ key: "power", value: "24" }, { key: "ip_rating", value: "IP65" }]);
+  });
 });
 
 describe("filterHref（查询串构造）", () => {
