@@ -4,16 +4,20 @@ import { notFound } from "next/navigation";
 import { getDb } from "@/lib/db";
 import { getPublicTenant, isSiteLocale } from "@/lib/public-site";
 import { siteBaseUrl } from "@/lib/seo";
+import { resolveNavigation, resolveSeo } from "@/lib/site-config";
 import { PublicNavigation } from "./public-navigation";
 
 export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Promise<Metadata> {
   const { locale } = await params;
   if (!isSiteLocale(locale)) return {};
   const tenant = await getPublicTenant();
+  const seo = resolveSeo(tenant.seoConfig);
+  const baseTitle = seo.defaultTitle ?? tenant.name;
   return {
     metadataBase: await siteBaseUrl(),
-    title: { default: tenant.name, template: `%s | ${tenant.name}` },
-    description: tenant.description ?? undefined,
+    title: { default: baseTitle, template: `%s | ${baseTitle}` },
+    description: (locale === "zh-CN" ? seo.defaultDescriptionZh : seo.defaultDescriptionEn) ?? tenant.description ?? undefined,
+    keywords: (locale === "zh-CN" ? seo.keywordsZh : seo.keywordsEn) ?? undefined,
   };
 }
 
@@ -21,6 +25,7 @@ export default async function PublicLayout({ children, params }: LayoutProps<"/[
   const { locale } = await params;
   if (!isSiteLocale(locale)) notFound();
   const tenant = await getPublicTenant();
+  const navItems = resolveNavigation(tenant.navigationConfig);
   const categories = await getDb().productCategory.findMany({ where: { tenantId: tenant.id, isActive: true }, orderBy: { sortOrder: "asc" }, select: { slug: true, nameZh: true, nameEn: true } });
-  return <div className="public-site" style={{ "--tenant-accent": tenant.primaryColor, "--tenant-dark": tenant.secondaryColor } as CSSProperties}><PublicNavigation locale={locale} tenantName={tenant.shortName ?? tenant.name} categories={categories}/>{children}</div>;
+  return <div className="public-site" style={{ "--tenant-accent": tenant.primaryColor, "--tenant-dark": tenant.secondaryColor } as CSSProperties}><PublicNavigation locale={locale} tenantName={tenant.shortName ?? tenant.name} categories={categories} items={navItems}/>{children}</div>;
 }

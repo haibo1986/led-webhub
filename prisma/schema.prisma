@@ -62,6 +62,10 @@ model Tenant {
   defaultLocale   Locale            @default(ZH_CN)
   publicDownloads Boolean           @default(true)
   aiEnabled       Boolean           @default(false)
+  // 审计 #25：企业设置 P0 四项的数据支撑（null = 使用内置默认值，zod 运行时校验）
+  navigationConfig Json?
+  homepageConfig   Json?
+  seoConfig        Json?
   createdAt       DateTime          @default(now())
   updatedAt       DateTime          @updatedAt
   domains         Domain[]

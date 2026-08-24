@@ -30,7 +30,8 @@ vi.mock("@/lib/db", () => {
       projectCase: { findFirst: mk("projectCase") },
       projectCaseTranslation: { findFirst: mk("projectCaseTranslation") },
       inquiry: { findFirst: mk("inquiry") },
-      tenant: { findFirst: mk("tenant"), findUnique: mk("tenant") },
+      domain: { findFirst: mk("domain") },
+      tenant: { findFirst: mk("tenant"), findUnique: mk("tenant"), findUniqueOrThrow: vi.fn().mockResolvedValue({ navigationConfig: null }) },
       auditLog: { create: vi.fn() },
       $transaction: h.$transaction,
     }),
@@ -48,6 +49,7 @@ import { deleteNewsAction, setNewsStatusAction, updateNewsAction } from "@/app/d
 import { deleteProjectAction, setProjectStatusAction, updateProjectAction } from "@/app/dashboard/projects/actions";
 import { saveVariantParametersAction } from "@/app/dashboard/products/[id]/parameters/actions";
 import { setInquiryStatusAction } from "@/app/dashboard/inquiries/actions";
+import { deleteNavItemAction, setPrimaryDomainAction } from "@/app/dashboard/settings/actions";
 
 function whereOf(model: string) {
   const call = h.calls.find((c) => c.model === model);
@@ -163,5 +165,16 @@ describe("租户边界矩阵：inquiries", () => {
   it("setInquiryStatusAction：询盘属于其他租户 → 抛边界违规", async () => {
     await expectBoundaryViolation(setInquiryStatusAction("inq-other", "VIEWED"));
     expect(whereOf("inquiry")).toMatchObject({ tenantId: "tenant-a", id: "inq-other" });
+  });
+});
+
+describe("租户边界矩阵：settings（审计 #25 新增动作）", () => {
+  it("setPrimaryDomainAction：域名属于其他租户或未验证 → 抛边界违规", async () => {
+    await expectBoundaryViolation(setPrimaryDomainAction("domain-other"));
+    expect(whereOf("domain")).toMatchObject({ tenantId: "tenant-a", id: "domain-other", isVerified: true });
+  });
+
+  it("deleteNavItemAction：导航项 id 不在本租户配置中 → 抛边界违规", async () => {
+    await expectBoundaryViolation(deleteNavItemAction("evil-item"));
   });
 });
