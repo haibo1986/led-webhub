@@ -7,9 +7,10 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/auth/dal";
 import { getDb } from "@/lib/db";
 import { homepageConfigSchema, navItemSchema, navigationConfigSchema, resolveNavigation, seoConfigSchema, type HomepageConfig, type SeoConfig } from "@/lib/site-config";
+import { createTranslateAction } from "@/lib/translate-factory";
 
 const schema = z.object({
-  name: z.string().trim().min(2).max(80), shortName: z.string().trim().max(30), description: z.string().trim().max(500),
+  name: z.string().trim().min(2).max(80), shortName: z.string().trim().max(30), description: z.string().trim().max(500), descriptionEn: z.string().trim().max(500),
   email: z.union([z.literal(""), z.email()]), phone: z.string().trim().max(40), address: z.string().trim().max(200),
   primaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/), secondaryColor: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   publicDownloads: z.boolean(), aiEnabled: z.boolean(),
@@ -17,7 +18,7 @@ const schema = z.object({
 
 export async function updateSettingsAction(formData: FormData) {
   const session = await requirePermission("tenant:manage");
-  const parsed = schema.safeParse({ name: formData.get("name"), shortName: formData.get("shortName"), description: formData.get("description"), email: formData.get("email"), phone: formData.get("phone"), address: formData.get("address"), primaryColor: formData.get("primaryColor"), secondaryColor: formData.get("secondaryColor"), publicDownloads: formData.get("publicDownloads") === "on", aiEnabled: formData.get("aiEnabled") === "on" });
+  const parsed = schema.safeParse({ name: formData.get("name"), shortName: formData.get("shortName"), description: formData.get("description"), descriptionEn: formData.get("descriptionEn"), email: formData.get("email"), phone: formData.get("phone"), address: formData.get("address"), primaryColor: formData.get("primaryColor"), secondaryColor: formData.get("secondaryColor"), publicDownloads: formData.get("publicDownloads") === "on", aiEnabled: formData.get("aiEnabled") === "on" });
   if (!parsed.success) redirect("/dashboard/settings?error=invalid");
   await getDb().$transaction([
     getDb().tenant.update({ where: { id: session.tenantId }, data: parsed.data }),
@@ -164,3 +165,18 @@ export async function setPrimaryDomainAction(domainId: string) {
   ]);
   revalidatePath("/dashboard/settings"); redirect("/dashboard/settings?saved=domain");
 }
+
+// 一键翻译（P1 工厂接入）：企业简介 description → descriptionEn（无 id 路径，redirectPath 固定回设置页）
+export const translateSettingsAction = createTranslateAction<{ id: string; description: string | null; descriptionEn: string | null }>({
+  permission: "tenant:manage",
+  resource: "Tenant",
+  auditAction: "TENANT_TRANSLATED",
+  module: "settings",
+  redirectBase: "/dashboard/settings",
+  redirectPath: () => "/dashboard/settings",
+  findItem: async (tenantId, id) => getDb().tenant.findFirst({ where: { id: tenantId }, select: { id: true, description: true, descriptionEn: true } }),
+  getZhTexts: (item) => [item.description ?? null],
+  buildEnWrite: async (item, en, tx) => {
+    await tx.tenant.update({ where: { id: item.id }, data: { descriptionEn: en[0] || null } });
+  },
+});

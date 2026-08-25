@@ -63,6 +63,7 @@ model Tenant {
   logoUrl         String?
   shortName       String?
   description     String?
+  descriptionEn   String?
   email           String?
   phone           String?
   address         String?

@@ -16,6 +16,8 @@ export type TranslateActionConfig<T> = {
   auditAction: string;
   module: TranslateModule;
   redirectBase: string;
+  /** 重定向目标自定义（默认 `${redirectBase}/${id}`）；无 id 路径的模块（如企业设置）用它覆盖 */
+  redirectPath?: (id: string) => string;
   /** 带租户过滤与软删过滤的查询；返回 null 表示跨租户/不存在 */
   findItem: (tenantId: string, id: string) => Promise<T | null>;
   /** 中文源文本按序返回；null/空串 = 该字段不翻译（英文保持空），保证与 buildEnWrite 的索引对齐 */
@@ -27,14 +29,15 @@ export type TranslateActionConfig<T> = {
 export function createTranslateAction<T>(config: TranslateActionConfig<T>) {
   return async function translateAction(id: string) {
     const session = await requirePermission(config.permission);
+    const target = config.redirectPath ? config.redirectPath(id) : `${config.redirectBase}/${id}`;
     const tenant = await getDb().tenant.findUnique({ where: { id: session.tenantId }, select: { aiEnabled: true } });
-    if (!tenant?.aiEnabled) redirect(`${config.redirectBase}/${id}?translated=disabled`);
-    if (!isTranslateConfigured()) redirect(`${config.redirectBase}/${id}?translated=nokey`);
+    if (!tenant?.aiEnabled) redirect(`${target}?translated=disabled`);
+    if (!isTranslateConfigured()) redirect(`${target}?translated=nokey`);
     const item = await config.findItem(session.tenantId, id);
     if (!item) throw new Error("TENANT_BOUNDARY_VIOLATION");
     const zhTexts = config.getZhTexts(item);
     const sources = zhTexts.filter((t) => !!t && !!t.trim());
-    if (!sources.length) redirect(`${config.redirectBase}/${id}?translated=empty`);
+    if (!sources.length) redirect(`${target}?translated=empty`);
     try {
       // 并行翻译后按原位置还原，空源保持空串
       const translated = await Promise.all(sources.map((t) => translateToEnglish(t as string, { module: config.module })));
@@ -45,10 +48,10 @@ export function createTranslateAction<T>(config: TranslateActionConfig<T>) {
         await tx.auditLog.create({ data: { tenantId: session.tenantId, actorId: session.userId, action: config.auditAction, resource: config.resource, resourceId: id, metadata: { target: "EN", fields: sources.length } } });
       });
     } catch (error) {
-      if (error instanceof Error && error.message.startsWith("DeepSeek API")) redirect(`${config.redirectBase}/${id}?translated=error`);
+      if (error instanceof Error && error.message.startsWith("DeepSeek API")) redirect(`${target}?translated=error`);
       throw error;
     }
-    revalidatePath(`${config.redirectBase}/${id}`);
-    redirect(`${config.redirectBase}/${id}?translated=1`);
+    revalidatePath(target);
+    redirect(`${target}?translated=1`);
   };
 }

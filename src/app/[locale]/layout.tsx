@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: LayoutProps<"/[locale]">): Pr
   return {
     metadataBase: await siteBaseUrl(),
     title: { default: baseTitle, template: `%s | ${baseTitle}` },
-    description: (locale === "zh-CN" ? seo.defaultDescriptionZh : seo.defaultDescriptionEn) ?? tenant.description ?? undefined,
+    description: (locale === "zh-CN" ? seo.defaultDescriptionZh : seo.defaultDescriptionEn) ?? (locale === "zh-CN" ? tenant.description : tenant.descriptionEn) ?? tenant.description ?? undefined,
     keywords: (locale === "zh-CN" ? seo.keywordsZh : seo.keywordsEn) ?? undefined,
   };
 }

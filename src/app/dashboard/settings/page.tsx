@@ -3,25 +3,27 @@ import { requirePermission } from "@/lib/auth/dal";
 import { getDb } from "@/lib/db";
 import { NAV_PAGES, resolveHomepage, resolveNavigation, resolveSeo } from "@/lib/site-config";
 import { AdminPage } from "../components/admin-page";
-import { addNavItemAction, deleteNavItemAction, moveNavItemAction, setPrimaryDomainAction, updateHomepageConfigAction, updateNavItemAction, updateSeoConfigAction, updateSettingsAction } from "./actions";
+import { TranslateButton } from "../components/translate-button";
+import { estimateCost } from "@/lib/translate";
+import { addNavItemAction, deleteNavItemAction, moveNavItemAction, setPrimaryDomainAction, translateSettingsAction, updateHomepageConfigAction, updateNavItemAction, updateSeoConfigAction, updateSettingsAction } from "./actions";
 
 const SAVED_HINTS: Record<string, string> = { "1": "设置已保存，新的品牌配置将在下次发布时应用。", nav: "导航设置已保存，公开站导航将立即按新配置渲染。", home: "首页模块配置已保存。", seo: "SEO 默认值已保存，用于未单独设置描述的页面。", domain: "主域名已更新，公开站将优先按新主域名解析。" };
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string }> }) {
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ saved?: string; error?: string; translated?: string }> }) {
   const session = await requirePermission("tenant:manage");
   const tenant = await getDb().tenant.findUniqueOrThrow({
     where: { id: session.tenantId },
-    select: { name: true, shortName: true, description: true, email: true, phone: true, address: true, primaryColor: true, secondaryColor: true, publicDownloads: true, aiEnabled: true, navigationConfig: true, homepageConfig: true, seoConfig: true, domains: { orderBy: { createdAt: "asc" } } },
+    select: { name: true, shortName: true, description: true, descriptionEn: true, email: true, phone: true, address: true, primaryColor: true, secondaryColor: true, publicDownloads: true, aiEnabled: true, navigationConfig: true, homepageConfig: true, seoConfig: true, domains: { orderBy: { createdAt: "asc" } } },
   });
   const nav = resolveNavigation(tenant.navigationConfig);
   const home = resolveHomepage(tenant.homepageConfig);
   const seo = resolveSeo(tenant.seoConfig);
   const state = await searchParams;
-  const hint = state.saved ? (SAVED_HINTS[state.saved] ?? SAVED_HINTS["1"]) : null;
+  const hint = state.saved ? (SAVED_HINTS[state.saved] ?? SAVED_HINTS["1"]) : null; const translatedHints: Record<string, string> = { "1": "英文简介已自动翻译，请核对后保存。", disabled: "AI 功能未开启。", nokey: "翻译服务未配置（缺少 DEEPSEEK_API_KEY）。", empty: "请先填写企业简介。" };
   const errors: Record<string, string> = { invalid: "提交内容不完整，请检查邮箱和颜色格式。", nav: "导航项格式不正确：标题必填、链接仅允许站内路径或 http(s) 外链。", home: "首页模块配置格式不正确。", seo: "SEO 配置格式不正确或超出长度限制。", domain: "只能把本企业已验证的域名设为主域名。" };
   return <AdminPage title="企业与网站设置" eyebrow="TENANT CONFIGURATION" tenant={tenant.name}>
-    {hint && <div className="save-notice"><CheckCircle2/>{hint}</div>}{state.error && <div className="form-error">{errors[state.error] ?? errors.invalid}</div>}
-    <form action={updateSettingsAction} className="settings-form"><section className="form-card"><div className="form-card-title"><div><h2>基础资料</h2><p>用于官网、页脚、询盘通知和 SEO 默认信息。</p></div><span>01</span></div><div className="form-grid"><label>企业全称<input name="name" defaultValue={tenant.name} required/></label><label>企业简称<input name="shortName" defaultValue={tenant.shortName ?? ""}/></label><label className="wide">企业简介<textarea name="description" defaultValue={tenant.description ?? ""} rows={4}/></label><label>公开邮箱<input name="email" type="email" defaultValue={tenant.email ?? ""}/></label><label>联系电话<input name="phone" defaultValue={tenant.phone ?? ""}/></label><label className="wide">联系地址<input name="address" defaultValue={tenant.address ?? ""}/></label></div></section>
+    {hint && <div className="save-notice"><CheckCircle2/>{hint}</div>}{state.translated && <div className={state.translated === "1" ? "save-notice" : "form-error"}>{translatedHints[state.translated] ?? "翻译失败，请稍后再试。"}</div>}{state.error && <div className="form-error">{errors[state.error] ?? errors.invalid}</div>}
+    <form action={updateSettingsAction} className="settings-form"><section className="form-card"><div className="form-card-title"><div><h2>基础资料</h2><p>用于官网、页脚、询盘通知和 SEO 默认信息。</p></div>{tenant.description && <TranslateButton action={translateSettingsAction.bind(null, session.tenantId)} label="一键翻译英文" costYuan={estimateCost([tenant.description]).costYuan} disabledReason={!tenant.aiEnabled ? "AI 翻译未开启（下方开关）" : undefined} />}<span>01</span></div><div className="form-grid"><label>企业全称<input name="name" defaultValue={tenant.name} required/></label><label>企业简称<input name="shortName" defaultValue={tenant.shortName ?? ""}/></label><label className="wide">企业简介<textarea name="description" defaultValue={tenant.description ?? ""} rows={4}/></label><label className="wide">English introduction<small>公开站英文版使用；可点「一键翻译英文」自动生成</small><textarea name="descriptionEn" defaultValue={tenant.descriptionEn ?? ""} rows={4}/></label><label>公开邮箱<input name="email" type="email" defaultValue={tenant.email ?? ""}/></label><label>联系电话<input name="phone" defaultValue={tenant.phone ?? ""}/></label><label className="wide">联系地址<input name="address" defaultValue={tenant.address ?? ""}/></label></div></section>
       <section className="form-card"><div className="form-card-title"><div><h2>品牌外观</h2><p>首套模板以主色作为灯光强调，以辅助色承载深色区域。</p></div><Palette/></div><div className="color-grid"><label><span style={{background:tenant.primaryColor}}/><div>主品牌色<small>按钮、状态与光线强调</small></div><input name="primaryColor" defaultValue={tenant.primaryColor} pattern="#[0-9A-Fa-f]{6}"/></label><label><span style={{background:tenant.secondaryColor}}/><div>辅助色<small>导航、页脚与深色背景</small></div><input name="secondaryColor" defaultValue={tenant.secondaryColor} pattern="#[0-9A-Fa-f]{6}"/></label></div></section>
       <section className="form-card compact"><div className="setting-toggle"><Download/><div><b>公开资料免登录下载</b><p>开启后，标记为“公开”的 PDF、IES、LDT 与 CAD 可直接下载；内部资料始终需要权限。</p></div><label className="switch"><input name="publicDownloads" type="checkbox" defaultChecked={tenant.publicDownloads}/><span/></label></div><div className="setting-toggle"><Sparkles/><div><b>AI 一键翻译</b><p>开启后，产品/案例/新闻编辑页提供「一键翻译英文」（DeepSeek 按量计费，需配置 DEEPSEEK_API_KEY）。</p></div><label className="switch"><input name="aiEnabled" type="checkbox" defaultChecked={tenant.aiEnabled}/><span/></label></div><div className="setting-toggle disabled"><Languages/><div><b>简体中文 + English</b><p>两种语言独立维护、预览和发布，缺失内容不会自动替代。</p></div><em>已启用</em></div></section>
       <div className="sticky-save"><p>保存不会直接修改已发布页面，需通过发布流程更新官网。</p><button><Save/>保存设置</button></div>

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth/dal";
 import { tenantScope } from "@/lib/tenant/scope";
+import { createTranslateAction } from "@/lib/translate-factory";
 import { getDb } from "@/lib/db";
 
 const schema = z.object({
@@ -73,6 +74,8 @@ export async function setNewsStatusAction(id: string, locale: "ZH_CN" | "EN", pu
   const session = await requirePermission("content:publish");
   const post = await getDb().newsPost.findFirst({ where: tenantScope(session.tenantId, { id: parsedId.data, deletedAt: null }), include: { translations: { where: { locale: parsedLocale.data }, take: 1 } } });
   if (!post?.translations[0]) throw new Error("TENANT_BOUNDARY_VIOLATION");
+  // 发布守卫：标题为空（未填写/未翻译）不可发布该语言
+  if (publish && !post.translations[0].title.trim()) redirect(`/dashboard/news/${parsedId.data}?translated=empty`);
   await getDb().$transaction([
     getDb().newsPostTranslation.update({ where: { id: post.translations[0].id }, data: { isPublished: publish } }),
     getDb().newsPost.update({ where: { id: parsedId.data }, data: publish ? { status: "PUBLISHED", publishedAt: new Date() } : {} }),
@@ -94,3 +97,17 @@ export async function deleteNewsAction(id: string) {
   ]);
   redirect("/dashboard/news?deleted=1");
 }
+
+// 一键翻译（P1 工厂接入）：中文 title/excerpt/body → EN（不发布）
+export const translateNewsAction = createTranslateAction<{ id: string; translations: { locale: string; title: string; excerpt: string | null; body: string | null }[] }>({
+  permission: "content:write",
+  resource: "NewsPost",
+  auditAction: "NEWS_TRANSLATED",
+  module: "news",
+  redirectBase: "/dashboard/news",
+  findItem: async (tenantId, id) => getDb().newsPost.findFirst({ where: { id, tenantId, deletedAt: null }, include: { translations: true } }),
+  getZhTexts: (item) => { const zh = item.translations.find((t) => t.locale === "ZH_CN"); return [zh?.title ?? null, zh?.excerpt ?? null, zh?.body ?? null]; },
+  buildEnWrite: async (item, en, tx) => {
+    await tx.newsPostTranslation.upsert({ where: { postId_locale: { postId: item.id, locale: "EN" } }, update: { title: en[0], excerpt: en[1] || null, body: en[2] || null }, create: { postId: item.id, locale: "EN", title: en[0], excerpt: en[1] || null, body: en[2] || null } });
+  },
+});

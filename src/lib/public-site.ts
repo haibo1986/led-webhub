@@ -15,7 +15,7 @@ export const getPublicTenant = cache(async () => {
   const headerStore = await headers();
   const hostname = (headerStore.get("x-forwarded-host") ?? headerStore.get("host") ?? "").split(":")[0].toLowerCase();
   const defaultSlug = process.env.DEFAULT_TENANT_SLUG ?? "lumenworks";
-  const select = { id: true, slug: true, name: true, shortName: true, description: true, email: true, phone: true, address: true, primaryColor: true, secondaryColor: true, publicDownloads: true, navigationConfig: true, homepageConfig: true, seoConfig: true } as const;
+  const select = { id: true, slug: true, name: true, shortName: true, description: true, descriptionEn: true, email: true, phone: true, address: true, primaryColor: true, secondaryColor: true, publicDownloads: true, navigationConfig: true, homepageConfig: true, seoConfig: true } as const;
   const domainTenant = hostname ? await getDb().tenant.findFirst({
     where: { status: { in: ["TRIAL", "ACTIVE"] }, domains: { some: { hostname, isVerified: true } } },
     select,
