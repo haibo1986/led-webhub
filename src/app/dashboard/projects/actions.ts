@@ -8,7 +8,7 @@ import { requirePermission } from "@/lib/auth/dal";
 import { tenantScope } from "@/lib/tenant/scope";
 import { getDb } from "@/lib/db";
 import { slugifyZh } from "@/lib/slugify";
-import { isTranslateConfigured, translateToEnglish } from "@/lib/translate";
+import { createTranslateAction } from "@/lib/translate-factory";
 
 const schema = z.object({ slug: z.string().trim().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/).optional(), category: z.string().trim().max(60), location: z.string().trim().max(100), titleZh: z.string().trim().min(2).max(160), titleEn: z.string().trim().max(180).optional(), descriptionZh: z.string().trim().max(5000), descriptionEn: z.string().trim().max(5000) });
 function parse(formData: FormData) { const raw = Object.fromEntries([...schema.keyof().options.map(key => [key, String(formData.get(key) ?? "")])]); return schema.safeParse({ ...raw, slug: raw.slug.trim() || undefined, titleEn: raw.titleEn.trim() || undefined }); }
@@ -123,31 +123,16 @@ export async function deleteProjectAction(id: string) {
   redirect("/dashboard/projects?deleted=1");
 }
 
-// 一键翻译（P2）：DeepSeek 翻译中文内容写入英文 translation（不发布，用户核对后可改）。
-// 前置条件：租户 AI 开关已开启且已配置 DEEPSEEK_API_KEY。
-export async function translateProjectAction(projectId: string) {
-  const session = await requirePermission("content:write");
-  const tenant = await getDb().tenant.findUnique({ where: { id: session.tenantId }, select: { aiEnabled: true } });
-  if (!tenant?.aiEnabled) redirect(`/dashboard/projects/${projectId}?translated=disabled`);
-  if (!isTranslateConfigured()) redirect(`/dashboard/projects/${projectId}?translated=nokey`);
-  const item = await getDb().projectCase.findFirst({ where: { id: projectId, tenantId: session.tenantId, deletedAt: null }, include: { translations: true } });
-  if (!item) throw new Error("TENANT_BOUNDARY_VIOLATION");
-  const zh = item.translations.find((t) => t.locale === "ZH_CN");
-  if (!zh?.title) redirect(`/dashboard/projects/${projectId}?translated=empty`);
-  let title: string, summary: string, description: string;
-  try {
-    [title, summary, description] = await Promise.all([
-      translateToEnglish(zh.title),
-      zh.summary ? translateToEnglish(zh.summary) : Promise.resolve(""),
-      zh.description ? translateToEnglish(zh.description) : Promise.resolve(""),
-    ]);
-  } catch {
-    redirect(`/dashboard/projects/${projectId}?translated=error`);
-  }
-  await getDb().$transaction([
-    getDb().projectCaseTranslation.upsert({ where: { caseId_locale: { caseId: projectId, locale: "EN" } }, update: { title, summary, description }, create: { caseId: projectId, locale: "EN", title, summary, description } }),
-    getDb().auditLog.create({ data: { tenantId: session.tenantId, actorId: session.userId, action: "PROJECT_TRANSLATED", resource: "ProjectCase", resourceId: projectId, metadata: { target: "EN" } } }),
-  ]);
-  revalidatePath(`/dashboard/projects/${projectId}`);
-  redirect(`/dashboard/projects/${projectId}?translated=1`);
-}
+// 一键翻译（P2 → P0a 工厂重构）：通用守卫链见 createTranslateAction，行为与审计不变
+export const translateProjectAction = createTranslateAction<{ id: string; translations: { locale: string; title: string; summary: string | null; description: string | null }[] }>({
+  permission: "content:write",
+  resource: "ProjectCase",
+  auditAction: "PROJECT_TRANSLATED",
+  module: "case",
+  redirectBase: "/dashboard/projects",
+  findItem: async (tenantId, id) => getDb().projectCase.findFirst({ where: { id, tenantId, deletedAt: null }, include: { translations: true } }),
+  getZhTexts: (item) => { const zh = item.translations.find((t) => t.locale === "ZH_CN"); return [zh?.title ?? null, zh?.summary ?? null, zh?.description ?? null]; },
+  buildEnWrite: async (item, en, tx) => {
+    await tx.projectCaseTranslation.upsert({ where: { caseId_locale: { caseId: item.id, locale: "EN" } }, update: { title: en[0], summary: en[1], description: en[2] }, create: { caseId: item.id, locale: "EN", title: en[0], summary: en[1], description: en[2] } });
+  },
+});
