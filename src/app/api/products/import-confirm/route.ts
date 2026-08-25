@@ -12,9 +12,11 @@ const rowsSchema = z.array(z.object({
   categorySlug: z.string().trim().min(1).max(60),
   sku: z.string().trim().min(2).max(80),
   nameZh: z.string().trim().min(2).max(120),
-  nameEn: z.string().trim().min(2).max(160),
+  nameEn: z.string().trim().max(160).optional(),
   taglineZh: z.string().trim().max(200),
   taglineEn: z.string().trim().max(240),
+  descriptionZh: z.string().trim().max(5000).optional(),
+  descriptionEn: z.string().trim().max(5000).optional(),
   slug: z.string().trim().max(120).refine((v) => !v || /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(v), "slug 格式不合法"),
   params: z.array(z.object({ key: z.string().max(60), raw: z.string().max(500) })).max(50),
 })).max(MAX_ROWS);
@@ -63,8 +65,8 @@ export async function POST(request: Request) {
           data: {
             tenantId: session.tenantId, categoryId: category.id, model, slug,
             translations: { create: [
-              { locale: "ZH_CN", name: first.nameZh, tagline: first.taglineZh || undefined },
-              { locale: "EN", name: first.nameEn, tagline: first.taglineEn || undefined },
+              { locale: "ZH_CN", name: first.nameZh, tagline: first.taglineZh || undefined, description: first.descriptionZh || undefined },
+              { locale: "EN", name: first.nameEn || first.nameZh, tagline: first.taglineEn || undefined, description: first.descriptionEn || undefined },
             ] },
             variants: { create: group.map((r, i) => ({ sku: r.sku, name: r.sku, sortOrder: i })) },
           },

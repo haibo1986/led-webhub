@@ -13,6 +13,8 @@ export type ParsedRow = {
   nameEn: string;
   taglineZh: string;
   taglineEn: string;
+  descriptionZh: string;
+  descriptionEn: string;
   slug: string;
   params: { key: string; raw: string }[];
 };
@@ -88,7 +90,7 @@ export async function parseProductWorkbook(
       if (raw.length > MAX_PARAM_LEN) issues.push({ row: r, level: "warning", message: `参数 ${p.key} 超过 ${MAX_PARAM_LEN} 字符，已截断` });
       params.push({ key: p.key, raw: raw.slice(0, MAX_PARAM_LEN) });
     }
-    rows.push({ row: r, model: base.model, categorySlug: category.slug, sku: base.sku, nameZh: base.name_zh, nameEn: base.name_en, taglineZh: base.tagline_zh ?? "", taglineEn: base.tagline_en ?? "", slug: base.slug ?? "", params });
+    rows.push({ row: r, model: base.model, categorySlug: category.slug, sku: base.sku, nameZh: base.name_zh, nameEn: base.name_en ?? "", taglineZh: base.tagline_zh ?? "", taglineEn: base.tagline_en ?? "", descriptionZh: base.description_zh ?? "", descriptionEn: base.description_en ?? "", slug: base.slug ?? "", params });
   }
   return { rows, issues, valid: rows.length, warnings: issues.filter((i) => i.level === "warning").length, errors: issues.filter((i) => i.level === "error").length };
 }

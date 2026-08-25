@@ -8,10 +8,12 @@ export const PRODUCT_COLUMNS: ImportColumn[] = [
   { key: "category", aliases: ["category", "分类", "产品分类"], required: true, hint: "分类中文名或 slug，如 洗墙灯 / wall-washer" },
   { key: "sku", aliases: ["sku", "SKU", "规格编码"], required: true, hint: "一行一个 SKU" },
   { key: "name_zh", aliases: ["name_zh", "中文名称", "中文名", "产品名称"], required: true, hint: "中文产品名（每个型号首行生效）" },
-  { key: "name_en", aliases: ["name_en", "英文名称", "英文名", "product name", "name (en)"], required: true, hint: "English product name" },
-  { key: "tagline_zh", aliases: ["tagline_zh", "中文卖点", "卖点"], required: false, hint: "一句话卖点（中文）" },
+  { key: "name_en", aliases: ["name_en", "英文名称", "英文名", "product name", "name (en)"], required: false, hint: "English product name（选填，可后台一键翻译）" },
+  { key: "tagline_zh", aliases: ["tagline_zh", "中文卖点", "一句话卖点", "卖点"], required: false, hint: "一句话卖点（中文，列表卡片展示）" },
   { key: "tagline_en", aliases: ["tagline_en", "英文卖点", "tagline"], required: false, hint: "Tagline (English)" },
-  { key: "slug", aliases: ["slug", "url别名", "url 别名"], required: false, hint: "URL 别名，不填自动生成" },
+  { key: "description_zh", aliases: ["description_zh", "中文描述", "特性描述", "产品特性", "产品描述"], required: false, hint: "产品特性描述（中文，详情页介绍正文，可换行）" },
+  { key: "description_en", aliases: ["description_en", "英文描述", "product description", "description"], required: false, hint: "Product description (English)" },
+  { key: "slug", aliases: ["slug", "url别名", "url 别名"], required: false, hint: "URL 别名（高级，不填自动生成）" },
 ];
 
 export function matchHeader(header: string, column: ImportColumn): boolean {

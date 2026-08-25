@@ -22,18 +22,23 @@ export async function GET(request: Request) {
   sheet.columns = [
     { header: "model", width: 16 }, { header: "category", width: 14 }, { header: "sku", width: 18 },
     { header: "name_zh", width: 26 }, { header: "name_en", width: 26 },
-    { header: "tagline_zh", width: 26 }, { header: "tagline_en", width: 26 }, { header: "slug", width: 24 },
+    { header: "tagline_zh", width: 26 }, { header: "tagline_en", width: 26 },
+    { header: "description_zh", width: 46 }, { header: "description_en", width: 46 },
     ...defs.map((d) => ({ header: d.key, width: 16 })),
   ];
   const sample = {
-    model: "示例型号", category: category.nameZh, sku: "示例型号-01",
-    name_zh: "示例中文产品名", name_en: "Sample product name",
-    tagline_zh: "一句话卖点", tagline_en: "One-line tagline", slug: "sample-model",
+    model: "XW30", category: category.nameZh, sku: "XW30-18W",
+    name_zh: "窄体线性洗墙灯", name_en: "Slim Linear Wall Washer",
+    tagline_zh: "连续、均匀、精准的立面光", tagline_en: "Continuous and precise facade illumination",
+    description_zh: "一体化铝合金灯体，多种光学配光可选，适合建筑立面连续洗墙。",
+    description_en: "Integrated aluminum housing with selectable optics for continuous facade washing.",
   };
-  sheet.addRow([sample.model, sample.category, sample.sku, sample.name_zh, sample.name_en, sample.tagline_zh, sample.tagline_en, sample.slug, ...defs.map(() => "示例值")]);
-  sheet.addRow(["（必填）同型号多行归组", "（必填）分类名或 slug", "（必填）一行一个 SKU", "（必填）中文产品名", "（必填）English name", "选填", "选填", "选填：不填自动生成", ...defs.map((d) => `${d.labelZh}${d.labelEn ? " / " + d.labelEn : ""}${d.unit ? `（${d.unit}）` : ""}${d.isRequired ? "（必填）" : ""}`)]);
+  sheet.addRow([sample.model, sample.category, sample.sku, sample.name_zh, sample.name_en, sample.tagline_zh, sample.tagline_en, sample.description_zh, sample.description_en, ...defs.map(() => "示例值")]);
+  sheet.addRow([sample.model, sample.category, "XW30-24W", "", "", "", "", "", "", ...defs.map(() => "示例值")]);
+  sheet.addRow([sample.model, sample.category, "XW30-36W", "", "", "", "", "", "", ...defs.map(() => "示例值")]);
+  sheet.addRow(["（必填）同型号多行归组，一行一个 SKU", "（必填）分类名或 slug", "（必填）SKU 编码", "（必填）中文产品名", "选填：可后台一键翻译", "选填：列表卡片卖点", "选填", "选填：详情页介绍正文，可换行", "选填", ...defs.map((d) => `${d.labelZh}${d.labelEn ? " / " + d.labelEn : ""}${d.unit ? `（${d.unit}）` : ""}${d.isRequired ? "（必填）" : ""}`)]);
   sheet.getRow(1).font = { bold: true };
-  sheet.getRow(3).font = { italic: true, color: { argb: "FF888888" } };
+  for (const r of [4, 5, 6]) sheet.getRow(r).font = { italic: true, color: { argb: "FF888888" } };
 
   const buf = await workbook.xlsx.writeBuffer();
   return new NextResponse(Buffer.from(buf), {

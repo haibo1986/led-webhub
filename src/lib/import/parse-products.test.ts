@@ -102,4 +102,15 @@ describe("parseProductWorkbook（Excel 导入管线）", () => {
     expect(preview.errors).toBe(0);
     expect(preview.rows[0].params).toEqual([{ key: "power", raw: "40" }, { key: "beam_angle", raw: "24°" }]);
   });
+
+  it("双语描述列（特性描述）解析且选填；name_en 缺失不阻塞", async () => {
+    const preview = await run([
+      ["型号", "分类", "SKU", "中文名称", "特性描述", "product description"],
+      ["XW-300", "洗墙灯", "XW-300A", "深照洗墙灯", "一体化铝合金灯体。", "Integrated aluminum housing."],
+    ]);
+    expect(preview.errors).toBe(0);
+    expect(preview.rows[0].nameEn).toBe("");
+    expect(preview.rows[0].descriptionZh).toBe("一体化铝合金灯体。");
+    expect(preview.rows[0].descriptionEn).toBe("Integrated aluminum housing.");
+  });
 });
