@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requirePermission } from "@/lib/auth/dal";
 import { getDb } from "@/lib/db";
 import { parseProductForm } from "@/lib/products/schema";
+import { createTranslateAction } from "@/lib/translate-factory";
 import { diffVariants } from "@/lib/products/variant-diff";
 
 const parse = parseProductForm;
@@ -89,9 +90,11 @@ export async function setProductLocaleStatusAction(productId: string, locale: "Z
   const session = await requirePermission("content:publish");
   const translation = await getDb().productTranslation.findFirst({
     where: { productId: parsedId.data, locale: parsedLocale.data, product: { tenantId: session.tenantId, deletedAt: null } },
-    select: { id: true },
+    select: { id: true, name: true },
   });
   if (!translation) throw new Error("TENANT_BOUNDARY_VIOLATION");
+  // 发布守卫：名称为空（未填写/未翻译）不可发布该语言
+  if (publish && !translation.name.trim()) redirect(`/dashboard/products/${parsedId.data}?translated=empty`);
   await getDb().$transaction(async (tx) => {
     await tx.productTranslation.update({ where: { id: translation.id }, data: { isPublished: publish } });
     if (publish) await tx.product.update({ where: { id: parsedId.data }, data: { status: "PUBLISHED", publishedAt: new Date() } });
@@ -102,3 +105,17 @@ export async function setProductLocaleStatusAction(productId: string, locale: "Z
   revalidatePath(locale === "ZH_CN" ? "/zh-CN" : "/en");
   revalidatePath(locale === "ZH_CN" ? "/zh-CN/products" : "/en/products");
 }
+
+// 一键翻译（P0b 工厂接入）：中文 name/tagline/description/seoTitle/seoDescription → EN（不发布）
+export const translateProductAction = createTranslateAction<{ id: string; translations: { locale: string; name: string; tagline: string | null; description: string | null; seoTitle: string | null; seoDescription: string | null }[] }>({
+  permission: "content:write",
+  resource: "Product",
+  auditAction: "PRODUCT_TRANSLATED",
+  module: "product",
+  redirectBase: "/dashboard/products",
+  findItem: async (tenantId, id) => getDb().product.findFirst({ where: { id, tenantId, deletedAt: null }, include: { translations: true } }),
+  getZhTexts: (item) => { const zh = item.translations.find((t) => t.locale === "ZH_CN"); return [zh?.name ?? null, zh?.tagline ?? null, zh?.description ?? null, zh?.seoTitle ?? null, zh?.seoDescription ?? null]; },
+  buildEnWrite: async (item, en, tx) => {
+    await tx.productTranslation.upsert({ where: { productId_locale: { productId: item.id, locale: "EN" } }, update: { name: en[0], tagline: en[1] || null, description: en[2] || null, seoTitle: en[3] || null, seoDescription: en[4] || null }, create: { productId: item.id, locale: "EN", name: en[0], tagline: en[1] || null, description: en[2] || null, seoTitle: en[3] || null, seoDescription: en[4] || null } });
+  },
+});
