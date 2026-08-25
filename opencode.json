@@ -1,0 +1,21 @@
+{
+  "mcp": {
+    "codex-cli": {
+      "type": "local",
+      "command": [
+        "codex",
+        "mcp-server"
+      ],
+      "enabled": true
+    },
+    "claude-code": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "claude-octopus@1.2.0"
+      ],
+      "enabled": true
+    }
+  }
+}
