@@ -8,6 +8,7 @@ type Category = { slug: string; nameZh: string; nameEn: string | null };
 type Issue = { row: number; level: "error" | "warning"; message: string };
 type Preview = { rows: { row: number; model: string; sku: string; nameZh: string }[]; issues: Issue[]; valid: number; warnings: number; errors: number };
 type Result = { succeeded: { model: string; skus: number }[]; failed: { model: string; reason: string }[]; total: number };
+type ImageResult = { imported: { model: string; files: number }[]; unmatched: string[] };
 
 export function ImportWizard({ categories }: { categories: Category[] }) {
   const [category, setCategory] = useState(categories[0]?.slug ?? "");
@@ -15,6 +16,22 @@ export function ImportWizard({ categories }: { categories: Category[] }) {
   const [result, setResult] = useState<Result | null>(null);
   const [busy, setBusy] = useState(false);
   const [fileError, setFileError] = useState("");
+  const [imageBusy, setImageBusy] = useState(false);
+  const [imageResult, setImageResult] = useState<ImageResult | null>(null);
+  const [imageError, setImageError] = useState("");
+
+  async function onZipChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setImageBusy(true); setImageError(""); setImageResult(null);
+    const fd = new FormData();
+    fd.append("file", file);
+    const res = await fetch("/api/products/import-images", { method: "POST", body: fd });
+    const data = await res.json();
+    setImageBusy(false);
+    if (!res.ok) { setImageError(data.error ?? "图片包上传失败"); return; }
+    setImageResult(data as ImageResult);
+  }
 
   async function onFileChange(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -70,6 +87,23 @@ export function ImportWizard({ categories }: { categories: Category[] }) {
           {result.failed.length > 0 && (
             <div className="mt-2 max-h-40 overflow-auto rounded border border-neutral-800 p-2 text-xs">{result.failed.map((f, i) => <p key={i} className="text-red-400">{f.model}：{f.reason}</p>)}</div>
           )}
+          <div className="mt-4 rounded border border-neutral-800 p-3">
+            <p className="font-medium">④ 图片包（可选）</p>
+            <p className="mt-1 text-xs text-neutral-400">打包为 zip（≤100MB），文件名以型号开头即可自动归入对应产品：`XW30-1.jpg` → 画廊；`XW30-尺寸图.jpg` → 尺寸图；`XW30-封面.jpg` → 封面。</p>
+            <label className="mt-2 flex w-fit cursor-pointer items-center gap-1.5 rounded bg-neutral-800 px-4 py-2 text-sm text-neutral-200 hover:bg-neutral-700"><FileUp size={15} />{imageBusy ? "上传处理中…" : "选择 zip 图片包"}<input type="file" accept=".zip" className="hidden" onChange={onZipChange} disabled={imageBusy} /></label>
+            {imageError && <div className="form-error mt-2">{imageError}</div>}
+            {imageResult && (
+              <div className="mt-2 text-xs">
+                <p className="text-emerald-500">已导入 {imageResult.imported.length} 个产品的图片（共 {imageResult.imported.reduce((n, s) => n + s.files, 0)} 个文件）。</p>
+                {imageResult.unmatched.length > 0 && (
+                  <div className="mt-2 max-h-32 overflow-auto rounded border border-neutral-800 p-2">
+                    <p className="text-amber-500">以下文件未匹配到型号或被跳过：</p>
+                    {imageResult.unmatched.map((f, i) => <p key={i} className="text-neutral-400">{f}</p>)}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
           <Link className="mt-3 inline-block rounded border border-neutral-800 px-4 py-2 text-sm text-neutral-300 hover:border-neutral-600" href="/dashboard/products">返回产品列表</Link>
         </div>
       )}
