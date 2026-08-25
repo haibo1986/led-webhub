@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { requirePermission } from "@/lib/auth/dal";
 import { getDb } from "@/lib/db";
+import { createTranslateAction } from "@/lib/translate-factory";
 
 export async function saveVariantParametersAction(productId: string, formData: FormData) {
   const session = await requirePermission("content:write");
@@ -34,3 +35,25 @@ export async function saveVariantParametersAction(productId: string, formData: F
   });
   revalidatePath(`/dashboard/products/${productId}/parameters`); redirect(`/dashboard/products/${productId}/parameters?saved=1`);
 }
+
+// 整批翻译参数标签（P2a）：模板全部 labelZh → labelEn（不发布语义不适用，直接更新定义）
+export const translateTemplateAction = createTranslateAction<{ id: string; tenantId: string; definitions: { id: string; labelZh: string }[] }>({
+  permission: "content:write",
+  resource: "ParameterTemplate",
+  auditAction: "PARAMETER_TEMPLATE_TRANSLATED",
+  module: "parameter",
+  redirectBase: "/dashboard/products",
+  redirectPath: (id) => `/dashboard/products/${id}/parameters`,
+  findItem: async (tenantId, id) => {
+    const product = await getDb().product.findFirst({ where: { id, tenantId, deletedAt: null }, include: { category: { include: { templates: { orderBy: { version: "desc" }, take: 1, include: { definitions: { select: { id: true, labelZh: true } } } } } } } });
+    const tpl = product?.category.templates[0];
+    return tpl ? { id: tpl.id, tenantId, definitions: tpl.definitions } : null;
+  },
+  getZhTexts: (item) => item.definitions.map((d) => d.labelZh),
+  buildEnWrite: async (item, en, tx) => {
+    for (const [i, def] of item.definitions.entries()) {
+      if (!en[i]) continue;
+      await tx.parameterDefinition.update({ where: { id: def.id }, data: { labelEn: en[i] } });
+    }
+  },
+});
