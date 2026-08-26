@@ -59,7 +59,7 @@ export function ImportWizard({ categories }: { categories: Category[] }) {
 
   return (
     <section className="form-card">
-      <div className="form-card-title"><div><h2>三步批量导入</h2><p>① 按分类下载空白模板 → ② 填写并上传预览 → ③ 确认入库。参数列头用模板字段 key，模板已含示例行与说明行。</p></div><span><FileUp /></span></div>
+      <div className="form-card-title"><div><h2>四步批量导入</h2><p>① 下载空白模板 → ② 填写并上传预览 → ③ 确认入库 → ④ 上传图片包（可选）。参数列头用模板字段 key，模板已含示例行与说明行。</p></div><span><FileUp /></span></div>
       <div className="flex flex-wrap items-end gap-3">
         <label className="flex flex-col gap-1 text-sm"><span className="text-neutral-400">产品分类（决定参数列）</span>
           <select value={category} onChange={(e) => setCategory(e.target.value)} className="rounded border border-neutral-800 bg-neutral-900/60 px-3 py-2 text-sm text-neutral-200 focus:border-amber-500/60 focus:outline-none">
