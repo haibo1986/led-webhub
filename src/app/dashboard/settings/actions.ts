@@ -174,7 +174,7 @@ export const translateSettingsAction = createTranslateAction<{ id: string; descr
   module: "settings",
   redirectBase: "/dashboard/settings",
   redirectPath: () => "/dashboard/settings",
-  findItem: async (tenantId, id) => getDb().tenant.findFirst({ where: { id: tenantId }, select: { id: true, description: true, descriptionEn: true } }),
+  findItem: async (tenantId) => getDb().tenant.findFirst({ where: { id: tenantId }, select: { id: true, description: true, descriptionEn: true } }),
   getZhTexts: (item) => [item.description ?? null],
   buildEnWrite: async (item, en, tx) => {
     await tx.tenant.update({ where: { id: item.id }, data: { descriptionEn: en[0] || null } });

@@ -60,7 +60,7 @@ seed 在生产环境默认拒绝执行（需 `ALLOW_SEED=true` 显式覆盖）�
 npm run db:validate
 npm run lint
 npm run build
-npm test                  # vitest：63 单元测试 + 租户边界矩阵（mock DB，不连库）
+npm test                  # vitest：91 单元测试 + 租户边界矩阵（mock DB，不连库）
 npx playwright test       # E2E：公开站核心流程 + 租户越权（需 Chromium 系统库）
 ```
 
